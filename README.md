@@ -1,21 +1,20 @@
-# TL;DR
+# Grounded SCAN
+
+This repository contains the code for generating the grounded SCAN benchmark.
+Grounded SCAN poses a simple task, where an agent must execute action sequences based on a synthetic language instruction.
+
+The agent is presented with a simple grid world containing a collection of
+objects, each of which is associated with a vector of features. The agent is
+evaluated on its ability to follow one or more instructions in this environment.
+Some instructions require interaction with particular kinds of objects.
+
+## TL;DR
 The data for the grounded SCAN paper is in the compressed folders in the folder `data` in this repository.
 
 Random data examples (more at bottom of this file):
 
 ![Random Example](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/movie.gif?token=AGNMPFCZAXAM4TH77MS73A26KJ4GW)
 ![while zigzagging](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/While%20zigzagging/movie.gif?token=AGNMPFFIRPB6MA6U6AHLM2C6KJ3X2)
-
-# Grounded SCAN
-
-This repository contains the code for generating the grounded SCAN benchmark.
-Grounded SCAN poses a simple task, where an agent must execute action sequences based on a synthetic language instruction.
-
-
-The agent is presented with a simple grid world containing a collection of
-objects, each of which is associated with a vector of features. The agent is
-evaluated on its ability to follow one or more instructions in this environment.
-Some instructions require interaction with particular kinds of objects.
 
 ## Data for Paper
 
