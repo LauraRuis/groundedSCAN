@@ -782,7 +782,7 @@ class GroundedScan(object):
             outfile_excel = output_file.split(".txt")[0] + ".xls"
             workbook.save(outfile_excel)
 
-    def visualize_prediction(self, predictions_file: str, only_save_errors=True, workbook=None) -> List[str]:
+    def position_analysis(self, predictions_file: str, workbook=None) -> List[str]:
         """For each prediction in a file visualizes it in a gif and writes to self.save_directory."""
         assert os.path.exists(predictions_file), "Trying to open a non-existing predictions file."
         with open(predictions_file, 'r') as infile:
@@ -839,25 +839,45 @@ class GroundedScan(object):
                     full_matches += 1
                 if no_match:
                     no_matches += 1
-
-                # str_command = ' '.join(command)
-                # mission = ' '.join(["Command:", str_command, "\nMeaning:"] + meaning
-                #                    + ["\nPrediction"] + predicted_example["prediction"]
-                #                    + ["\n      Target:"] + target_commands)
-                # if predicted_example["exact_match"]:
-                #     if only_save_errors:
-                #         continue
-                #     parent_save_dir = "exact_matches"
-                # else:
-                #     parent_save_dir = "errors"
-                # save_dir_prediction = self.visualize_command(
-                #     situation, command, predicted_demonstration, mission=mission, parent_save_dir=parent_save_dir,
-                #     attention_weights=predicted_example["attention_weights_situation"])
-                # save_dirs.append(save_dir_prediction)
             sheet.write(1, 0, col_matches)
             sheet.write(1, 1, row_matches)
             sheet.write(1, 2, full_matches)
             sheet.write(1, 3, no_matches)
+        return save_dirs
+
+    def visualize_prediction(self, predictions_file: str, only_save_errors=False) -> List[str]:
+        """For each prediction in a file visualizes it in a gif and writes to self.save_directory."""
+        assert os.path.exists(predictions_file), "Trying to open a non-existing predictions file."
+        with open(predictions_file, 'r') as infile:
+            data = json.load(infile)
+            save_dirs = []
+            for i, predicted_example in enumerate(data):
+                command = predicted_example["input"]
+                prediction = predicted_example["prediction"]
+                target = predicted_example["target"]
+                meaning = [self._vocabulary.translate_word(word) for word in command]
+                situation_repr = predicted_example["situation"]
+                situation = Situation.from_representation(situation_repr[0])
+                (predicted_commands, predicted_demonstration,
+                 predicted_end_column, predicted_end_row) = self.demonstrate_target_commands(
+                    command, situation, target_commands=prediction)
+                (target_commands, target_demonstration,
+                 actual_end_column, actual_end_row) = self.demonstrate_target_commands(
+                    command, situation, target_commands=target)
+                str_command = ' '.join(command)
+                mission = ' '.join(["Command:", str_command, "\nMeaning:"] + meaning
+                                   + ["\nPrediction"] + predicted_example["prediction"]
+                                   + ["\n      Target:"] + target_commands)
+                if predicted_example["exact_match"]:
+                    if only_save_errors:
+                        continue
+                    parent_save_dir = "exact_matches"
+                else:
+                    parent_save_dir = "errors"
+                save_dir_prediction = self.visualize_command(
+                    situation, command, predicted_demonstration, mission=mission, parent_save_dir=parent_save_dir,
+                    attention_weights=predicted_example["attention_weights_situation"])
+                save_dirs.append(save_dir_prediction)
         return save_dirs
 
     def visualize_data_example(self, data_example: dict) -> str:

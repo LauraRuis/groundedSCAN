@@ -194,8 +194,8 @@ def main():
                 file))
             grounded_scan = GroundedScan.load_dataset_from_file(flags["load_dataset_from"],
                                                                 flags["output_directory"])
-            grounded_scan.visualize_prediction(os.path.join(flags["output_directory"], file),
-                                               only_save_errors=flags["only_save_errors"], workbook=workbook)
+            grounded_scan.position_analysis(os.path.join(flags["output_directory"], file),
+                                            workbook=workbook)
             logger.info("Wrote position analysis for {}".format(file))
         outfile_excel = os.path.join(flags["output_directory"], "position_analysis.xls")
         workbook.save(outfile_excel)
