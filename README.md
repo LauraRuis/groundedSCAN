@@ -1,3 +1,6 @@
+# TL;DR
+The data for the grounded SCAN paper is in the compressed folders in the folder `data` in this repository.
+
 # Grounded SCAN
 
 This repository contains the code for generating the grounded SCAN benchmark.
