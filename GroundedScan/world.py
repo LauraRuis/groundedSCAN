@@ -5,7 +5,6 @@ import numpy as np
 from typing import Tuple
 from typing import List
 from typing import Dict
-from typing import Set
 import random
 from itertools import product
 
@@ -42,12 +41,6 @@ WEST = Direction("west")
 EAST = Direction("east")
 FORWARD = Direction("forward")
 
-Action = namedtuple("Action", "name")
-PICK_UP = Action("pick_up")
-MOVE_FORWARD = Action("move_forward")
-STAY = Action("stay")
-DROP = Action("drop")
-
 DIR_TO_INT = {
     NORTH: 3,
     SOUTH: 1,
@@ -56,13 +49,6 @@ DIR_TO_INT = {
 }
 
 INT_TO_DIR = {direction_int: direction for direction, direction_int in DIR_TO_INT.items()}
-
-ACTION_TO_INT = {
-    STAY: -1,
-    MOVE_FORWARD: 2,
-    PICK_UP: 3,
-    DROP: 4
-}
 
 SIZE_TO_INT = {
     "small": 1,
@@ -243,7 +229,7 @@ def parse_positioned_object_repr(positioned_object_repr: dict):
 
 class Situation(object):
     """
-    TODO
+    Specification of a situation that can be used for serialization as well as initialization of a world state.
     """
     def __init__(self, grid_size: int, agent_position: Position, agent_direction: Direction,
                  target_object: PositionedObject, placed_objects: List[PositionedObject], carrying=None):
@@ -450,14 +436,14 @@ class ObjectVocabulary(object):
 
 class World(MiniGridEnv):
     """
-    TODO(lauraruis):
-    When constructed generates object vectors for all possible object combinations based on
-    size color and shape. Also creates an empty grid with an agent at an initial position. Call initialize to
-    place objects and place the agent at a particular position.
+    Wrapper class to execute actions in a world state. Connected to minigrid.py in gym_minigrid for visualizations.
+    Every time actions are executed, the commands and situations are saved in self._observed_commands and
+    self._observed_situations, which can then be retrieved with get_current_observations().
+    The world can be cleared with clear_situation().
     """
 
     AVAILABLE_SHAPES = {"circle", "square", "cylinder"}
-    AVAILABLE_COLORS = {"red", "blue", "green"}
+    AVAILABLE_COLORS = {"red", "blue", "green", "yellow"}
 
     def __init__(self, grid_size: int, shapes: List[str], colors: List[str], object_vocabulary: ObjectVocabulary,
                  save_directory: str):
@@ -683,6 +669,11 @@ class World(MiniGridEnv):
         # Add object at new position
         self.place_object(old_positioned_object.object, new_position)
 
+    def pull(self, position: Position):
+        self.agent_pos = (position.column, position.row)
+        self._observed_commands.append("pull")
+        self._observed_situations.append(self.get_current_situation())
+
     def pick_up_object(self):
         """
         Picking up an object in gym-minigrid means removing it and saying the agent is carrying it.
@@ -703,7 +694,7 @@ class World(MiniGridEnv):
         self._observed_commands.append("DROP")
         self._observed_situations.append(self.get_current_situation())
 
-    def push_object(self, direction: Direction, primitive_command: str):
+    def push_or_pull_object(self, direction: Direction, primitive_command: str):
         current_object = self.grid.get(*self.agent_pos)
         if not current_object:
             self._observed_commands.append(primitive_command)
@@ -717,16 +708,29 @@ class World(MiniGridEnv):
                 if self.within_grid(new_position):
                     if not self.grid.get(new_position[0], new_position[1]):
                         self.move_object(Position(column=self.agent_pos[0], row=self.agent_pos[1]), new_position)
-                        self.take_step_in_direction(direction, primitive_command)
+                        if primitive_command == "push":
+                            self.take_step_in_direction(direction, primitive_command)
+                        else:
+                            self.pull(position=new_position)
+
             else:
                 # Pushing an object that won't move just yet (because it's heavy).
                 self._observed_commands.append(primitive_command)
                 self._observed_situations.append(self.get_current_situation())
 
-    def push_object_to_wall(self):
-        direction = INT_TO_DIR[self.agent_dir]
+    def move_object_to_wall(self, action: str, manner: str):
+        if action == "push":
+            direction = INT_TO_DIR[self.agent_dir]
+        else:
+            direction = INT_TO_DIR[(self.agent_dir + 2) % 4]
         while self.empty_cell_in_direction(direction=direction):
-            self.push_object(direction=direction, primitive_command="push")
+            if manner == "while spinning":
+                self.spin()
+            elif manner == "cautiously":
+                self.look_left_and_right()
+            self.push_or_pull_object(direction=direction, primitive_command=action)
+            if manner == "hesitantly":
+                self.hesitate()
 
     @staticmethod
     def get_direction(direction_str: str):
@@ -770,10 +774,13 @@ class World(MiniGridEnv):
         elif verb == "walk" or verb == "run" or verb == "jump":
             self.take_step_in_direction(direction=DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]],
                                         primitive_command=verb)
-        elif verb == "push":
-            self.push_object(direction=DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]], primitive_command="push")
+        elif verb == "push" or verb == "pull":
+            self.push_or_pull_object(direction=DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]],
+                                     primitive_command=verb)
+        elif verb == "stay":
+            return
         else:
-            raise ValueError("Incorrect command.")
+            raise ValueError("Incorrect command {}.".format(command_str))
 
     def empty_cell_in_direction(self, direction: Direction):
         next_cell = self.agent_pos + DIR_TO_VEC[DIR_TO_INT[direction]]
@@ -783,12 +790,44 @@ class World(MiniGridEnv):
         else:
             return False
 
-    def go_to_position(self, position: Position, manner: str, primitive_command: str):
-        """TODO: check if manner still correct"""
+    def look_left_and_right(self):
+        self.take_step(self.actions.left, "turn left")
+        self.take_step(self.actions.right, "turn right")
+        self.take_step(self.actions.right, "turn right")
+        self.take_step(self.actions.left, "turn left")
 
+    def hesitate(self):
+        self._observed_commands.append("stay")
+        self._observed_situations.append(self.get_current_situation())
+
+    def spin(self):
+        for _ in range(4):
+            self.take_step(self.actions.left, "turn left")
+
+    def move_with_manners(self, direction: Direction, manner: str, primitive_command: str):
+        # Spin to the left
+        if manner == "while spinning":
+            self.spin()
+            self.take_step_in_direction(direction=direction, primitive_command=primitive_command)
+        # Look left and right if cautious
+        elif manner == "cautiously":
+            self.turn_to_direction(direction=direction)
+            self.look_left_and_right()
+            self.take_step_in_direction(direction=direction, primitive_command=primitive_command)
+        else:
+            self.take_step_in_direction(direction=direction, primitive_command=primitive_command)
+
+        # Stop after each step
+        if manner == "hesitantly":
+            self.hesitate()
+
+    def go_to_position(self, position: Position, manner: str, primitive_command: str):
+        """Move to the position denoted in the argument. Adds an action for each step to self._observed_commands
+        and self._observed_situations. If a manner is specified, the sequence of actions will be transformed to
+        represent the specified manner."""
         # Zigzag somewhere until in line with the goal, then just go straight for the goal
         if manner == "while zigzagging" and not self.agent_in_line_with_goal(position):
-            # find direction of goal
+            # Find direction of goal.
             direction_to_goal, first_move = self.direction_to_goal(position)
             previous_step = first_move
             if direction_to_goal == "NE" or direction_to_goal == "SE":
@@ -799,9 +838,11 @@ class World(MiniGridEnv):
                 # turn in opposite direction of previous step and take take step
                 if previous_step == self.actions.left:
                     self.take_step(self.actions.right, "turn right")
+                    previous_step = self.actions.right
                 else:
-                    self.take_step(self.actions.right, "turn left")
-                self.take_step(self.actions.forward, primitive_command + " LEFT")
+                    self.take_step(self.actions.left, "turn left")
+                    previous_step = self.actions.left
+                self.take_step(self.actions.forward, primitive_command)
 
             # Finish the route not zigzagging
             while self.agent_pos[0] > position.column:
@@ -813,70 +854,15 @@ class World(MiniGridEnv):
             while self.agent_pos[1] < position.row:
                 self.take_step_in_direction(direction=SOUTH, primitive_command=primitive_command)
         else:
-            # Look left and right if cautious
-            if manner == "cautiously":
-                self.take_step(self.actions.left, "turn left")  # TODO: is cautiously about turning or looking?
-                self.take_step(self.actions.right, "turn right")
-                self.take_step(self.actions.right, "turn right")
-                self.take_step(self.actions.left, "turn left")
-                self.take_step(self.actions.left, "turn left")
-                self.take_step(self.actions.right, "turn right")
-
-            # Calculate the route to the object on the grid
+            # Calculate the route to the object on the grid.
             while self.agent_pos[0] > position.column:
-                if manner == "while spinning":
-                    for _ in range(4):
-                        self.take_step(self.actions.left, "turn left")
-                    self.take_step_in_direction(direction=WEST, primitive_command=primitive_command)
-                else:
-                    self.take_step_in_direction(direction=WEST, primitive_command=primitive_command)
-
-                # Stop after each step
-                if manner == "hesitantly":
-                    self._observed_commands.append("stay")
-                    self._observed_situations.append(self.get_current_situation())
-
-                # Spin to the left
-                if manner == "while spinning":
-                    for _ in range(4):
-                        self.take_step(self.actions.left, "turn left")
+                self.move_with_manners(direction=WEST, manner=manner, primitive_command=primitive_command)
             while self.agent_pos[0] < position.column:
-                if manner == "while spinning":
-                    for _ in range(4):
-                        self.take_step(self.actions.left, "turn left")
-                    self.take_step_in_direction(direction=EAST, primitive_command=primitive_command)
-                else:
-                    self.take_step_in_direction(direction=EAST, primitive_command=primitive_command)
-
-                # Stop after each step
-                if manner == "hesitantly":
-                    self._observed_commands.append("stay")
-                    self._observed_situations.append(self.get_current_situation())
+                self.move_with_manners(direction=EAST, manner=manner, primitive_command=primitive_command)
             while self.agent_pos[1] > position.row:
-                if manner == "while spinning":
-                    for _ in range(4):
-                        self.take_step(self.actions.left, "turn left")
-                    self.take_step_in_direction(direction=NORTH, primitive_command=primitive_command)
-                else:
-                    self.take_step_in_direction(direction=NORTH, primitive_command=primitive_command)
-
-                # Stop after each step
-                if manner == "hesitantly":
-                    self._observed_commands.append("stay")
-                    self._observed_situations.append(self.get_current_situation())
+                self.move_with_manners(direction=NORTH, manner=manner, primitive_command=primitive_command)
             while self.agent_pos[1] < position.row:
-                # Spin to the left
-                if manner == "while spinning":
-                    for _ in range(4):
-                        self.take_step(self.actions.left, "turn left")
-                    self.take_step_in_direction(direction=SOUTH, primitive_command=primitive_command)
-                else:
-                    self.take_step_in_direction(direction=SOUTH, primitive_command=primitive_command)
-
-                # Stop after each step
-                if manner == "hesitantly":
-                    self._observed_commands.append("stay")
-                    self._observed_situations.append(self.get_current_situation())
+                self.move_with_manners(direction=SOUTH, manner=manner, primitive_command=primitive_command)
 
     def has_object(self, object_str: str) -> bool:
         if object_str not in self._object_lookup_table.keys():
@@ -906,7 +892,7 @@ class World(MiniGridEnv):
     def agent_in_line_with_goal(self, goal: Position):
         return goal.column == self.agent_pos[0] or goal.row == self.agent_pos[1]
 
-    def take_step(self, action: Action, observed_command: str):
+    def take_step(self, action, observed_command: str):
         self.step(action=action)
         self._observed_situations.append(self.get_current_situation())
         self._observed_commands.append(observed_command)
@@ -915,6 +901,8 @@ class World(MiniGridEnv):
         """Turn to some direction."""
         current_direction = self.agent_dir
         target_direction = DIR_TO_INT[direction]
+        if current_direction == target_direction:
+            return
         assert current_direction != target_direction, "Trying to turn to a direction that is the current direction."
         difference_vector = DIR_TO_VEC[target_direction] - DIR_TO_VEC[self.agent_dir]
         difference_norm = np.linalg.norm(difference_vector, ord=2)

@@ -6,15 +6,15 @@ from gym import spaces
 from gym.utils import seeding
 
 # Size in pixels of a cell in the full-scale human view
-CELL_PIXELS = 20
+CELL_PIXELS = 60
 
 # Map of color names to RGB values
 COLORS = {
-    'red': np.array([255, 0, 0]),
-    'green': np.array([0, 255, 0]),
-    'blue': np.array([0, 0, 255]),
+    'red': np.array([128, 0, 0]),
+    'green': np.array([46, 139, 87]),
+    'blue': np.array([25, 25, 112]),
     'purple': np.array([112, 39, 195]),
-    'yellow': np.array([255, 255, 0]),
+    'yellow': np.array([255, 191, 0]),
     'grey': np.array([100, 100, 100]),
     'pink': np.array([255, 192, 203])
 }
@@ -339,7 +339,7 @@ class Grid:
                 0,
                 widthPx,
                 heightPx,
-                0, 0, 0
+                255, 255, 255
             )
         else:
             for j in range(0, heightPx):
@@ -379,8 +379,7 @@ class Grid:
 
     def encode(self, agent_row: int, agent_column: int, agent_direction: int):
         """
-        Produce a compact numpy encoding of the grid
-        TODO: write test for this, write decoding loop
+        Produce a compact numpy encoding of the grid.
         """
         array = np.zeros((self.width, self.height, self._num_attributes_object + 1 + 4), dtype='uint8')
         for col in range(self.width):
@@ -417,7 +416,7 @@ class MiniGridEnv(gym.Env):
         right = 1
         forward = 2
 
-        # Pick up an object  TODO: make this push?
+        # Pick up an object
         pickup = 3
         # Drop an object
         drop = 4

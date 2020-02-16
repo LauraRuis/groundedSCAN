@@ -1,8 +1,5 @@
 import pronounceable
-import numpy as np
-from typing import List
-from typing import Set
-from typing import Dict
+from typing import List, Set, Dict
 
 
 class Vocabulary(object):
@@ -11,10 +8,10 @@ class Vocabulary(object):
     through class method `sample` as well as setting user-defined words through default constructor.
     """
     INTRANSITIVE_VERBS = {"walk"}
-    TRANSITIVE_VERBS = {"push"}
+    TRANSITIVE_VERBS = {"push", "pull"}
     ADVERBS = {"quickly", "slowly", "while zigzagging", "while spinning", "cautiously", "hesitantly"}
     NOUNS = {"circle", "square", "cylinder"}
-    COLOR_ADJECTIVES = {"green", "red", "blue"}
+    COLOR_ADJECTIVES = {"green", "red", "blue", "yellow"}
     SIZE_ADJECTIVES = {"small", "big"}
 
     def __init__(self, intransitive_verbs: Dict[str, str], transitive_verbs: Dict[str, str], adverbs: Dict[str, str],

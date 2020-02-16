@@ -1,5 +1,9 @@
 imageio
+setuptools
 gym
 matplotlib
 pronounceable
 PyQt5
+opencv-python
+numpy
+xlwt

@@ -1,24 +1,11 @@
-from GroundedScan.world import Situation
-from GroundedScan.world import EVENT
-from GroundedScan.world import Object
-from GroundedScan.world import Position
-from GroundedScan.world import World
-from GroundedScan.world import ObjectVocabulary
-from GroundedScan.grammar import Grammar
-from GroundedScan.grammar import Derivation
+from GroundedScan.world import Situation, EVENT, Object, Position, World, ObjectVocabulary
+from GroundedScan.grammar import Grammar, Derivation
 from GroundedScan.vocabulary import Vocabulary
-from GroundedScan.helpers import topo_sort
-from GroundedScan.helpers import save_counter
-from GroundedScan.helpers import bar_plot
-from GroundedScan.helpers import grouped_bar_plot
+from GroundedScan.helpers import topo_sort, save_counter, bar_plot, grouped_bar_plot
 
 import json
-from collections import Counter
-from collections import defaultdict
-from typing import List
-from typing import Tuple
-from typing import Union
-from typing import Dict
+from collections import Counter, defaultdict
+from typing import List, Tuple, Union, Dict
 import numpy as np
 import os
 import imageio
@@ -26,13 +13,15 @@ import random
 import itertools
 import logging
 from copy import deepcopy
+import xlwt
+from xlwt import Workbook
 
 logger = logging.getLogger("GroundedScan")
 
 
 class GroundedScan(object):
     """
-    A dataset for generalization in language, grounded in a gridworld.
+    A dataset for systematic generalization in language, grounded in a gridworld.
     """
 
     def __init__(self, intransitive_verbs: Union[Dict[str, str], List[str], int],
@@ -41,7 +30,8 @@ class GroundedScan(object):
                  color_adjectives: Union[Dict[str, str], List[str], int],
                  size_adjectives: Union[Dict[str, str], List[str], int],
                  grid_size: int, min_object_size: int,
-                 max_object_size: int, type_grammar: str, sample_vocabulary: str,
+                 max_object_size: int, type_grammar: str, sample_vocabulary: str, percentage_train: float,
+                 percentage_dev=0.01,
                  save_directory=os.getcwd(), max_recursion=1):
         if sample_vocabulary == 'sample':
             needed_type = int
@@ -55,6 +45,7 @@ class GroundedScan(object):
                 isinstance(adverbs, needed_type) and isinstance(nouns, needed_type) and
                 isinstance(color_adjectives, needed_type) and isinstance(size_adjectives, needed_type)), \
             "please specify correct flags for words for --sample_vocabulary={}.".format(sample_vocabulary)
+
         # All images, data and data statistics will be saved in this directory.
         self.save_directory = save_directory
 
@@ -68,11 +59,14 @@ class GroundedScan(object):
             self._vocabulary = Vocabulary.sample(num_intransitive=intransitive_verbs, num_transitive=transitive_verbs,
                                                  num_adverbs=adverbs, num_color_adjectives=color_adjectives,
                                                  num_size_adjectives=size_adjectives)
+        # We need to be able to load the saved vocabulary from file to map nonce words to their original meaning.
         elif sample_vocabulary == 'load':
             self._vocabulary = Vocabulary(intransitive_verbs=intransitive_verbs,
                                           transitive_verbs=transitive_verbs,
                                           adverbs=adverbs, nouns=nouns, color_adjectives=color_adjectives,
                                           size_adjectives=size_adjectives)
+        else:
+            raise ValueError("Unknown value for sample_vocabulary.")
 
         # Object vocabulary.
         self._object_vocabulary = ObjectVocabulary(shapes=self._vocabulary.get_semantic_shapes(),
@@ -94,7 +88,10 @@ class GroundedScan(object):
         self._grammar = Grammar(vocabulary=self._vocabulary, type_grammar=type_grammar, max_recursion=max_recursion)
 
         # Structures for data and statistics.
-        self._possible_splits = ["train", "test", "visual", "situational_1", "situational_2", "contextual"]
+        self._percentage_train = percentage_train
+        self._percentage_dev = percentage_dev
+        self._possible_splits = ["train", "dev", "test", "visual", "situational_1", "situational_2", "contextual",
+                                 "adverb_1", "adverb_2", "visual_easier", "target_lengths"]
         self._data_pairs = self.get_empty_split_dict()
         self._template_identifiers = self.get_empty_split_dict()
         self._examples_to_visualize = []
@@ -111,35 +108,31 @@ class GroundedScan(object):
     def get_empty_split_dict(self):
         return {split: [] for split in self._possible_splits}
 
-    def make_test_set(self):
-        num_examples_train = int(0.3 * len(self._data_pairs["train"]))
-        k_random_indices = random.sample(range(0, len(self._data_pairs["train"])), k=num_examples_train)
+    def make_test_set(self, type_set: str, percentage: float):
+        num_examples = int(percentage * len(self._data_pairs["train"]))
+        k_random_indices = random.sample(range(0, len(self._data_pairs["train"])), k=num_examples)
         for example_idx in k_random_indices:
             example = deepcopy(self._data_pairs["train"][example_idx])
             template_identifier = self._template_identifiers["train"][example_idx]
-            self._data_pairs["test"].append(example)
-            self._template_identifiers["test"].append(template_identifier)
+            self._data_pairs[type_set].append(example)
+            self._template_identifiers[type_set].append(template_identifier)
         for example_idx in sorted(k_random_indices, reverse=True):
             del self._data_pairs["train"][example_idx]
             del self._template_identifiers["train"][example_idx]
 
-    def move_k_examples_to_train(self, k: int):
-        for split in self._possible_splits:
-            if split == "train":
-                continue
-            if len(self._data_pairs[split]) < k + 1:
-                logger.info("Not enough examples in split {} for k(k={})-shot generalization".format(split, k))
-                continue
-            k_random_indices = random.sample(range(0, len(self._data_pairs[split])), k=k)
-            for example_idx in k_random_indices:
-                example = deepcopy(self._data_pairs[split][example_idx])
-                template_identifier = self._template_identifiers[split][example_idx]
-                self._data_pairs["train"].append(example)
-                self._template_identifiers["train"].append(template_identifier)
-                self._k_shot_examples_in_train[split] += 1
-            for example_idx in sorted(k_random_indices, reverse=True):
-                del self._data_pairs[split][example_idx]
-                del self._template_identifiers[split][example_idx]
+    def move_k_examples_to_train(self, k: int, split: str):
+        if len(self._data_pairs[split]) < k + 1:
+            logger.info("Not enough examples in split {} for k(k={})-shot generalization".format(split, k))
+        k_random_indices = random.sample(range(0, len(self._data_pairs[split])), k=k)
+        for example_idx in k_random_indices:
+            example = deepcopy(self._data_pairs[split][example_idx])
+            template_identifier = self._template_identifiers[split][example_idx]
+            self._data_pairs["train"].append(example)
+            self._template_identifiers["train"].append(template_identifier)
+            self._k_shot_examples_in_train[split] += 1
+        for example_idx in sorted(k_random_indices, reverse=True):
+            del self._data_pairs[split][example_idx]
+            del self._template_identifiers[split][example_idx]
 
     def get_examples_with_image(self, split="train", simple_situation_representation=False) -> dict:
         """
@@ -151,7 +144,11 @@ class GroundedScan(object):
         """
         for example in self._data_pairs[split]:
             command = self.parse_command_repr(example["command"])
-            meaning = self.parse_command_repr(example["meaning"])
+            if example.get("meaning"):
+                meaning = example["meaning"]
+            else:
+                meaning = example["command"]
+            meaning = self.parse_command_repr(meaning)
             situation = Situation.from_representation(example["situation"])
             self._world.clear_situation()
             self.initialize_world(situation)
@@ -161,7 +158,7 @@ class GroundedScan(object):
                 situation_image = self._world.get_current_situation_image()
             target_commands = self.parse_command_repr(example["target_commands"])
             yield {"input_command": command, "input_meaning": meaning,
-                   "derivation_representation": example["derivation"],
+                   "derivation_representation": example.get("derivation"),
                    "situation_image": situation_image, "situation_representation": example["situation"],
                    "target_command": target_commands}
 
@@ -213,7 +210,7 @@ class GroundedScan(object):
         return [self._vocabulary.translate_word(word) for word in input_command]
 
     def fill_example(self, command: List[str], derivation: Derivation, situation: Situation, target_commands: List[str],
-                     verb_in_command: str, target_predicate: dict, visualize: bool, splits: List[str]):
+                     verb_in_command: str, target_predicate: dict, visualize: bool, adverb: str, splits: List[str]):
         """Add an example to the list of examples for the specified split."""
         example = {
             "command": self.command_repr(command),
@@ -222,6 +219,7 @@ class GroundedScan(object):
             "situation": situation.to_representation(),
             "target_commands": self.command_repr(target_commands),
             "verb_in_command": self._vocabulary.translate_word(verb_in_command),
+            "manner": self._vocabulary.translate_word(adverb),
             "referred_target": ' '.join([self._vocabulary.translate_word(target_predicate["size"]),
                                          self._vocabulary.translate_word(target_predicate["color"]),
                                          self._vocabulary.translate_word(target_predicate["noun"])])
@@ -283,6 +281,9 @@ class GroundedScan(object):
             "target_position": Counter(),
             "agent_position": Counter(),
             "verbs_in_command": defaultdict(int),
+            "manners_in_command": defaultdict(int),
+            "verb_adverb_combinations": defaultdict(lambda: defaultdict(int)),
+            "verb_target_combinations": defaultdict(lambda: defaultdict(int)),
             "referred_targets": defaultdict(lambda: defaultdict(int)),
             "placed_targets": defaultdict(int),
             "situations": {
@@ -323,11 +324,19 @@ class GroundedScan(object):
 
         # Update the statistics regarding the command.
         self._data_statistics[split]["verbs_in_command"][data_example["verb_in_command"]] += 1
-        self._data_statistics[split]["referred_targets"][data_example["referred_target"]][placed_target] += 1
+        manner = data_example.get("manner")
+        self._data_statistics[split]["manners_in_command"][manner] += 1
+        self._data_statistics[split]["referred_targets"][data_example.get("referred_target")][placed_target] += 1
+        self._data_statistics[split]["verb_adverb_combinations"][manner][data_example["verb_in_command"]] += 1
+        self._data_statistics[split]["verb_target_combinations"][data_example["verb_in_command"]][placed_target] += 1
         self._data_statistics[split]["input_length"][len(data_example["command"].split(','))] += 1
 
         self._data_statistics[split]["target_length"][len(data_example["target_commands"].split(','))] += 1
-        referred_target = data_example["referred_target"].split()
+        referred_target = data_example.get("referred_target")
+        if referred_target:
+            referred_target = referred_target.split()
+        else:
+            referred_target = [""]
         if len(referred_target) == 3:
             referred_categories = "size,color,shape"
         elif len(referred_target) == 1:
@@ -393,6 +402,24 @@ class GroundedScan(object):
             self.save_position_counts(self._data_statistics[split]["agent_position"], infile)
             infile.write("Target positions:\n")
             self.save_position_counts(self._data_statistics[split]["target_position"], infile)
+
+            infile.write("Verbs:\n")
+            verb_target_combinations = self._data_statistics[split]["verb_target_combinations"]
+            infile.write("Verb target combinations:\n")
+            for key, values in verb_target_combinations.items():
+                save_counter(" " + key, values, infile)
+            infile.write("\n")
+
+            infile.write("Adverbs:\n")
+            manners_in_command = self._data_statistics[split]["manners_in_command"]
+            infile.write("Adverb occurrences:\n")
+            save_counter("Adverbs", manners_in_command, infile)
+            infile.write("\n")
+            verb_adverb_combinations = self._data_statistics[split]["verb_adverb_combinations"]
+            infile.write("Verb adverb combinations:\n")
+            for key, values in verb_adverb_combinations.items():
+                save_counter(" " + key, values, infile)
+            infile.write("\n")
             referred_targets = self._data_statistics[split]["referred_targets"]
             infile.write("\nReferred Targets: \n")
             for key, values in referred_targets.items():
@@ -419,6 +446,9 @@ class GroundedScan(object):
         verbs_in_command = self._data_statistics[split]["verbs_in_command"]
         bar_plot(verbs_in_command, "verbs_in_command", os.path.join(self.save_directory,
                                                                     split + "_" + "verbs_in_command.png"))
+        manners_in_command = self._data_statistics[split]["manners_in_command"]
+        bar_plot(manners_in_command, "manners_in_command", os.path.join(self.save_directory,
+                                                                        split + "_" + "manners_in_command.png"))
         bar_plot(self._data_statistics[split]["target_length"], "target_lengths",
                  os.path.join(self.save_directory, split + "_" + "target_lengths.png"))
         bar_plot(self._data_statistics[split]["input_length"], "input_lengths",
@@ -440,6 +470,7 @@ class GroundedScan(object):
                 "min_object_size": self._object_vocabulary.smallest_size,
                 "max_object_size": self._object_vocabulary.largest_size,
                 "max_recursion": self.max_recursion,
+                "percentage_train": self._percentage_train,
                 "examples": {key: values for key, values in self._data_pairs.items()}
             }
             dataset_representation.update(self._vocabulary.to_representation())
@@ -453,18 +484,36 @@ class GroundedScan(object):
         return output_path
 
     @classmethod
-    def load_dataset_from_file(cls, file_path: str, save_directory: str):
+    def load_dataset_from_file(cls, file_path: str, save_directory: str, k=0):
         with open(file_path, 'r') as infile:
             all_data = json.load(infile)
+            percentage_train = all_data.get("percentage_train")
+            if not percentage_train:
+                percentage_train = 0.8
             dataset = cls(all_data["intransitive_verbs"], all_data["transitive_verbs"], all_data["adverbs"],
                           all_data["nouns"], all_data["color_adjectives"], all_data["size_adjectives"],
                           all_data["grid_size"], all_data["min_object_size"], all_data["max_object_size"],
                           type_grammar=all_data["type_grammar"], save_directory=save_directory,
+                          percentage_train=percentage_train,
                           max_recursion=all_data["max_recursion"], sample_vocabulary='load')
             for split, examples in all_data["examples"].items():
-                for example in examples:
-                    dataset._data_pairs[split].append(example)
-                    dataset.update_data_statistics(example, split)
+                if split == "adverb_1":
+                    num_examples = len(examples)
+                    k_random_indices = random.sample(range(0, num_examples), k=k)
+                else:
+                    k_random_indices = []
+                for i, example in enumerate(examples):
+                    if i in k_random_indices:
+                        dataset._data_pairs["train"].append(example)
+                        dataset.update_data_statistics(example, "train")
+                        dataset._data_pairs["dev"].append(example)
+                        dataset.update_data_statistics(example, "dev")
+                    else:
+                        dataset._data_pairs[split].append(example)
+                        dataset.update_data_statistics(example, split)
+                    if split == "train" and dataset._vocabulary.translate_meaning("cautiously") in example["command"]:
+                        dataset._data_pairs["dev"].append(example)
+                        dataset.update_data_statistics(example, "dev")
             return dataset
 
     def generate_all_commands(self) -> {}:
@@ -482,7 +531,7 @@ class GroundedScan(object):
                 return command, arguments
 
     def demonstrate_target_commands(self, command: str, initial_situation: Situation,
-                                    target_commands: List[str]) -> Tuple[List[str], List[Situation]]:
+                                    target_commands: List[str]) -> Tuple[List[str], List[Situation], int, int]:
         """Executes a sequence of commands starting from initial_situation."""
         current_situation = self._world.get_current_situation()
         current_mission = self._world.mission
@@ -494,11 +543,12 @@ class GroundedScan(object):
             self._world.execute_command(target_command)
 
         target_commands, target_demonstration = self._world.get_current_observations()
+        end_column, end_row = self._world.agent_pos
         self._world.clear_situation()
 
         # Re-initialize the world as before the command
         self.initialize_world(current_situation, mission=current_mission)
-        return target_commands, target_demonstration
+        return target_commands, target_demonstration, end_column, end_row
 
     def demonstrate_command(self, derivation: Derivation, initial_situation: Situation) -> Tuple[List[str],
                                                                                                  List[Situation], str]:
@@ -542,16 +592,16 @@ class GroundedScan(object):
                         action = term.specs.action
                         is_transitive = term.specs.is_transitive
 
-            # Find the manner adverb if it exists.  TODO: there can only be a manner if there is a verb?
+            # Find the manner adverb if it exists.
             manner = [term.specs.manner for term in event_lf.terms if term.specs.manner]
             manner = manner.pop() if manner else None
             assert len(args) <= 1, "Only one target object supported, but two arguments parsed in a derivation."
             if len(args) > 0:
-                # Find the logical form of the argument of the verb and find its location
+                # Find the logical form of the argument of the verb and find its location.
                 arg_logical_form = sub_logical_form.select([args[0]])
                 object_str, object_predicate = arg_logical_form.to_predicate()
 
-                # If no location is passed, find the target object there
+                # If no location is passed, find the target object there.
                 if not initial_situation.target_object:
                     translated_object_str = ' '.join([self._vocabulary.translate_word(word) for word in object_str.split()])
                     translated_object_size = self._vocabulary.translate_word(object_predicate["size"])
@@ -560,7 +610,7 @@ class GroundedScan(object):
                                                                         object_size=translated_object_size)
                     else:
                         object_locations = {}
-                # Else we have saved the target location when we generated the situation
+                # Else we have saved the target location when we generated the situation.
                 else:
                     object_locations = [initial_situation.target_object.position]
 
@@ -574,11 +624,12 @@ class GroundedScan(object):
                 else:
                     primitive_command = "walk"
 
-                self._world.go_to_position(goal, manner, primitive_command=primitive_command)
+                self._world.go_to_position(position=goal, manner=manner, primitive_command=primitive_command)
 
                 # Interact with the object for transitive verbs.
                 if is_transitive:
-                    self._world.push_object_to_wall()
+                    semantic_action = self._vocabulary.translate_word(action)
+                    self._world.move_object_to_wall(action=semantic_action, manner=manner)
 
         target_commands, target_demonstration = self._world.get_current_observations()
         self._world.clear_situation()
@@ -606,12 +657,13 @@ class GroundedScan(object):
                             attention_weights_commands: List[List[int]], attention_weights_situation: List[List[int]]):
         raise NotImplementedError()
 
-    def error_analysis(self, predictions_file: str, output_file: str):
+    def error_analysis(self, predictions_file: str, output_file: str, save_directory: str):
         assert os.path.exists(predictions_file), "Trying to open a non-existing predictions file."
         error_analysis = {
             "target_length": defaultdict(lambda: {"accuracy": [], "exact_match": []}),
             "input_length": defaultdict(lambda: {"accuracy": [], "exact_match": []}),
             "verb_in_command": defaultdict(lambda: {"accuracy": [], "exact_match": []}),
+            "manner": defaultdict(lambda: {"accuracy": [], "exact_match": []}),
             "referred_target": defaultdict(lambda: {"accuracy": [], "exact_match": []}),
             "referred_size": defaultdict(lambda: {"accuracy": [], "exact_match": []}),
             "distance_to_target": defaultdict(lambda: {"accuracy": [], "exact_match": []}),
@@ -620,6 +672,7 @@ class GroundedScan(object):
         }
         all_accuracies = []
         exact_matches = []
+        workbook = Workbook()
         with open(predictions_file, 'r') as infile:
             data = json.load(infile)
             logger.info("Running error analysis on {} examples.".format(len(data)))
@@ -639,6 +692,11 @@ class GroundedScan(object):
                 arguments = []
                 derivation.meaning(arguments)
                 target_str, target_predicate = arguments.pop().to_predicate()
+                adverb = ""
+                for word in derivation.words():
+                    if word in self._vocabulary.get_adverbs():
+                        adverb = word
+                manner = self._vocabulary.translate_word(adverb)
                 example_information["referred_target"] = ' '.join([
                     self._vocabulary.translate_word(target_predicate["size"]),
                     self._vocabulary.translate_word(target_predicate["color"]),
@@ -655,6 +713,7 @@ class GroundedScan(object):
                                                                  situation.target_object.object.shape])
                 example_information["direction_to_target"] = situation.direction_to_target
                 example_information["distance_to_target"] = situation.distance_to_target
+                example_information["manner"] = manner
 
                 # Add that information to the analysis.
                 for key in error_analysis.keys():
@@ -669,12 +728,21 @@ class GroundedScan(object):
             outfile.write(" Num. exact matches: {}\n".format(exact_matches_counter[True]))
             outfile.write(" Num not exact matches: {}\n\n".format(exact_matches_counter[False]))
             for key, values in error_analysis.items():
+                sheet = workbook.add_sheet(key)
+                sheet.write(0, 0, key)
+                sheet.write(0, 1, "Num examples")
+                sheet.write(0, 2, "Mean accuracy")
+                sheet.write(0, 3, "Std. accuracy")
+                sheet.write(0, 4, "Exact Match")
+                sheet.write(0, 5, "Not Exact Match")
+                sheet.write(0, 6, "Exact Match Percentage")
                 outfile.write("\nDimension {}\n\n".format(key))
                 means = {}
                 standard_deviations = {}
                 num_examples = {}
                 exact_match_distributions = {}
-                for item_key, item_values in values.items():
+                exact_match_relative_distributions = {}
+                for i, (item_key, item_values) in enumerate(values.items()):
                     outfile.write("  {}:{}\n\n".format(key, item_key))
                     accuracies = np.array(item_values["accuracy"])
                     mean_accuracy = np.mean(accuracies)
@@ -684,6 +752,8 @@ class GroundedScan(object):
                     standard_deviations[item_key] = standard_deviation
                     exact_match_distribution = Counter(item_values["exact_match"])
                     exact_match_distributions[item_key] = exact_match_distribution
+                    exact_match_relative_distributions[item_key] = exact_match_distribution[True] / (
+                            exact_match_distribution[False] + exact_match_distribution[True])
                     outfile.write("    Num. examples: {}\n".format(len(item_values["accuracy"])))
                     outfile.write("    Mean accuracy: {}\n".format(mean_accuracy))
                     outfile.write("    Min. accuracy: {}\n".format(np.min(accuracies)))
@@ -691,45 +761,103 @@ class GroundedScan(object):
                     outfile.write("    Std. accuracy: {}\n".format(standard_deviation))
                     outfile.write("    Num. exact match: {}\n".format(exact_match_distribution[True]))
                     outfile.write("    Num. not exact match: {}\n\n".format(exact_match_distribution[False]))
+                    sheet.write(i + 1, 0, item_key)
+                    sheet.write(i + 1, 1, len(item_values["accuracy"]))
+                    sheet.write(i + 1, 2, mean_accuracy)
+                    sheet.write(i + 1, 3, standard_deviation)
+                    sheet.write(i + 1, 4, exact_match_distribution[True])
+                    sheet.write(i + 1, 5, exact_match_distribution[False])
+                    sheet.write(i + 1, 6, exact_match_distribution[True] / (
+                            exact_match_distribution[False] + exact_match_distribution[True]))
                 outfile.write("\n\n\n")
-                bar_plot(means, title=key, save_path=os.path.join(self.save_directory, key + '_accuracy'),
+                bar_plot(means, title=key, save_path=os.path.join(save_directory, key + '_accuracy'),
                          errors=standard_deviations, y_axis_label="accuracy")
+                bar_plot(exact_match_relative_distributions, title=key, save_path=os.path.join(
+                    save_directory, key + '_exact_match_rel'),
+                         errors={}, y_axis_label="Exact Match Percentage")
                 grouped_bar_plot(values=exact_match_distributions, group_one_key=True, group_two_key=False,
-                                 title=key + ' Exact Matches', save_path=os.path.join(self.save_directory,
+                                 title=key + ' Exact Matches', save_path=os.path.join(save_directory,
                                                                                       key + '_exact_match'),
                                  sort_on_key=True)
+            outfile_excel = output_file.split(".txt")[0] + ".xls"
+            workbook.save(outfile_excel)
 
-    def visualize_prediction(self, predictions_file: str, only_save_errors=True) -> List[Tuple[str]]:
+    def visualize_prediction(self, predictions_file: str, only_save_errors=True, workbook=None) -> List[str]:
         """For each prediction in a file visualizes it in a gif and writes to self.save_directory."""
         assert os.path.exists(predictions_file), "Trying to open a non-existing predictions file."
         with open(predictions_file, 'r') as infile:
             data = json.load(infile)
             save_dirs = []
-            for predicted_example in data:
+            sheet = workbook.add_sheet(predictions_file.split("/")[1].split(".")[0].split("_")[-1])
+            sheet.write(0, 0, "Col Matches")
+            sheet.write(0, 1, "Row Matches")
+            sheet.write(0, 2, "Full Match")
+            sheet.write(0, 3, "No Match")
+            sheet.write(2, 0, "pred col")
+            sheet.write(2, 1, "actual col")
+            sheet.write(2, 2, "match")
+            sheet.write(2, 3, "pred row")
+            sheet.write(2, 4, "actual row")
+            sheet.write(2, 5, "match")
+            sheet.write(2, 6, "full match")
+            sheet.write(2, 7, "no match")
+            col_matches = 0
+            row_matches = 0
+            full_matches = 0
+            no_matches = 0
+            for i, predicted_example in enumerate(data):
                 command = predicted_example["input"]
                 prediction = predicted_example["prediction"]
                 target = predicted_example["target"]
                 meaning = [self._vocabulary.translate_word(word) for word in command]
                 situation_repr = predicted_example["situation"]
                 situation = Situation.from_representation(situation_repr[0])
-                predicted_commands, predicted_demonstration = self.demonstrate_target_commands(
+                (predicted_commands, predicted_demonstration,
+                 predicted_end_column, predicted_end_row) = self.demonstrate_target_commands(
                     command, situation, target_commands=prediction)
-                target_commands, target_demonstration = self.demonstrate_target_commands(
+                (target_commands, target_demonstration,
+                 actual_end_column, actual_end_row) = self.demonstrate_target_commands(
                     command, situation, target_commands=target)
-                str_command = ' '.join(command)
-                mission = ' '.join(["Command:", str_command, "\nMeaning:"] + meaning
-                                   + ["\nPrediction"] + predicted_example["prediction"]
-                                   + ["\n      Target:"] + target_commands)
-                if predicted_example["exact_match"]:
-                    if only_save_errors:
-                        continue
-                    parent_save_dir = "exact_matches"
-                else:
-                    parent_save_dir = "errors"
-                save_dir_prediction = self.visualize_command(
-                    situation, str_command, predicted_demonstration, mission=mission, parent_save_dir=parent_save_dir,
-                    attention_weights=predicted_example["attention_weights_situation"])
-                save_dirs.append(save_dir_prediction)
+                col_match = predicted_end_column == actual_end_column
+                row_match = predicted_end_row == actual_end_row
+                full_match = col_match and row_match
+                no_match = not col_match and not row_match
+                if i < 2000:
+                    sheet.write(i + 3, 0, int(predicted_end_column))
+                    sheet.write(i + 3, 1, int(actual_end_column))
+                    sheet.write(i + 3, 2, int(col_match))
+                    sheet.write(i + 3, 3, int(predicted_end_row))
+                    sheet.write(i + 3, 4, int(actual_end_row))
+                    sheet.write(i + 3, 5, int(row_match))
+                    sheet.write(i + 3, 6, int(full_match))
+                    sheet.write(i + 3, 7, int(no_match))
+                if col_match:
+                    col_matches += 1
+                if row_match:
+                    row_matches += 1
+                if full_match:
+                    full_matches += 1
+                if no_match:
+                    no_matches += 1
+
+                # str_command = ' '.join(command)
+                # mission = ' '.join(["Command:", str_command, "\nMeaning:"] + meaning
+                #                    + ["\nPrediction"] + predicted_example["prediction"]
+                #                    + ["\n      Target:"] + target_commands)
+                # if predicted_example["exact_match"]:
+                #     if only_save_errors:
+                #         continue
+                #     parent_save_dir = "exact_matches"
+                # else:
+                #     parent_save_dir = "errors"
+                # save_dir_prediction = self.visualize_command(
+                #     situation, command, predicted_demonstration, mission=mission, parent_save_dir=parent_save_dir,
+                #     attention_weights=predicted_example["attention_weights_situation"])
+                # save_dirs.append(save_dir_prediction)
+            sheet.write(1, 0, col_matches)
+            sheet.write(1, 1, row_matches)
+            sheet.write(1, 2, full_matches)
+            sheet.write(1, 3, no_matches)
         return save_dirs
 
     def visualize_data_example(self, data_example: dict) -> str:
@@ -737,7 +865,7 @@ class GroundedScan(object):
             data_example)
         mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning),
                             "\nTarget:"] + actual_target_commands)
-        save_dir = self.visualize_command(situation, ' '.join(command), target_demonstration,
+        save_dir = self.visualize_command(situation, command, target_demonstration,
                                           mission=mission)
         return save_dir
 
@@ -750,15 +878,15 @@ class GroundedScan(object):
             save_dirs.append(save_dir)
         return save_dirs
 
-    def visualize_command(self, initial_situation: Situation, command: str, demonstration: List[Situation],
+    def visualize_command(self, initial_situation: Situation, command: List[str], demonstration: List[Situation],
                           mission: str, parent_save_dir="", attention_weights=[]) -> str:
         """
         :param initial_situation: (list of objects with their location, grid size, agent position)
         :param command: command in natural language
         :param demonstration: action sequence
-        :param mission: TODO
-        :param parent_save_dir: TODO
-        :param attention_weights: TODO
+        :param mission: the string you want to display in the text box of the image
+        :param parent_save_dir: directory to save in, can be the instruction text separated by _'s
+        :param attention_weights: if filled, colors grid cells with higher values darker grey
         :return: path_to_visualization
         """
         # Save current situation.
@@ -766,7 +894,7 @@ class GroundedScan(object):
         current_mission = self._world.mission
 
         # Initialize directory with current command as its name.
-        mission_folder = '_'.join([self._vocabulary.translate_word(word) for word in command.split()])
+        mission_folder = '_'.join([self._vocabulary.translate_word(word) for word in command])
         if parent_save_dir:
             mission_folder = os.path.join(parent_save_dir, mission_folder)
             if not os.path.exists(os.path.join(self.save_directory, parent_save_dir)):
@@ -854,7 +982,7 @@ class GroundedScan(object):
         return list(range(self._object_vocabulary.smallest_size, size))
 
     def generate_distinct_objects(self, referred_size: str, referred_color: str, referred_shape: str,
-                                  actual_size: int) -> Tuple[list, list]:
+                                  actual_size: int, actual_color: str) -> Tuple[list, list]:
         """
         Generate a list of objects that are distinct from some referred target. E.g. if the referred target is a
         small circle, and the actual color of the target object is red, there cannot also be a blue circle of the same
@@ -872,9 +1000,8 @@ class GroundedScan(object):
         if not referred_size and not referred_color:
             all_shapes = self._object_vocabulary.object_shapes
             all_shapes.remove(referred_shape)
-
             for shape in all_shapes:
-                objects.append((self._object_vocabulary.sample_size(), self._object_vocabulary.sample_color(), shape))
+                objects.append([(self._object_vocabulary.sample_size(), self._object_vocabulary.sample_color(), shape)])
             return objects, obligatory_objects
         # E.g. distinct from 'red circle' -> no other red circles of any size; generate one randomly size object for
         # each color, shape combination that is not a 'red circle'.
@@ -882,7 +1009,7 @@ class GroundedScan(object):
             for shape in self._object_vocabulary.object_shapes:
                 for color in self._object_vocabulary.object_colors:
                     if not (shape == referred_shape and color == referred_color):
-                        objects.append((self._object_vocabulary.sample_size(), color, shape))
+                        objects.append([(self._object_vocabulary.sample_size(), color, shape)])
             return objects, obligatory_objects
         else:
             if referred_size == "small":
@@ -893,19 +1020,23 @@ class GroundedScan(object):
                 raise ValueError("Unknown referred size in command")
             all_other_shapes = self._object_vocabulary.object_shapes
             all_other_shapes.remove(referred_shape)
-            # E.g. distinct from 'small circle' -> no circles of size <= as target in any color; generate two
+            # E.g. distinct from 'small circle' -> no circles of size <= than target in any color; generate two
             # random sizes for each color-shape pair except for the shape that is referred generate one larger objects
             # (if referred size is small, else a smaller object)
             if not referred_color:
                 for shape in self._object_vocabulary.object_shapes:
                     for color in self._object_vocabulary.object_colors:
                         if not shape == referred_shape:
+                            colored_shapes = []
                             for _ in range(2):
-                                objects.append((self._object_vocabulary.sample_size(), color, shape))
+                                colored_shapes.append((self._object_vocabulary.sample_size(), color, shape))
+                            objects.append(colored_shapes)
                         else:
-                            if not color == referred_color:
+                            if not color == actual_color:
+                                colored_shapes = []
                                 for _ in range(2):
-                                    obligatory_objects.append((random.choice(all_other_sizes), color, shape))
+                                    colored_shapes.append((random.choice(all_other_sizes), color, shape))
+                                objects.append(colored_shapes)
                             else:
                                 obligatory_objects.append((random.choice(all_other_sizes), color, shape))
                 return objects, obligatory_objects
@@ -915,8 +1046,10 @@ class GroundedScan(object):
                 for shape in self._object_vocabulary.object_shapes:
                     for color in self._object_vocabulary.object_colors:
                         if not (shape == referred_shape and color == referred_color):
+                            colored_shapes = []
                             for _ in range(2):
-                                objects.append((self._object_vocabulary.sample_size(), color, shape))
+                                colored_shapes.append((self._object_vocabulary.sample_size(), color, shape))
+                            objects.append(colored_shapes)
                         else:
                             obligatory_objects.append((random.choice(all_other_sizes), color, shape))
                 return objects, obligatory_objects
@@ -1005,7 +1138,8 @@ class GroundedScan(object):
                                 condition[directions[0]] = steps_in_first_direction
                                 condition[directions[1]] = steps_in_second_direction
                                 agent_position = self._world.sample_position_conditioned(*condition.values())
-                                intermediate_target_position = self._world.get_position_at(agent_position, directions[0],
+                                intermediate_target_position = self._world.get_position_at(agent_position,
+                                                                                           directions[0],
                                                                                            steps_in_first_direction)
                                 target_position = self._world.get_position_at(intermediate_target_position,
                                                                               directions[1], steps_in_second_direction)
@@ -1033,11 +1167,14 @@ class GroundedScan(object):
             referred_size=self._vocabulary.translate_word(referred_size),
             referred_color=self._vocabulary.translate_word(referred_color),
             referred_shape=self._vocabulary.translate_word(referred_shape),
-            actual_size=actual_size)
+            actual_size=actual_size,
+            actual_color=target_color)
         num_to_sample = int(len(distinct_objects) * sample_percentage)
         num_to_sample = max(min_other_objects, num_to_sample)
         objects_to_place = obligatory_objects
-        objects_to_place.extend(random.sample(distinct_objects, k=num_to_sample))
+        sampled_objects = random.sample(distinct_objects, k=num_to_sample)
+        for sampled_objs in sampled_objects:
+            objects_to_place.extend(sampled_objs)
         for size, color, shape in objects_to_place:
             other_position = self._world.sample_position()
             self._world.place_object(Object(size=size, color=color, shape=shape), position=other_position)
@@ -1069,7 +1206,8 @@ class GroundedScan(object):
 
     def get_data_pairs(self, max_examples=None, num_resampling=1, other_objects_sample_percentage=0.5,
                        split_type="uniform", visualize_per_template=0, visualize_per_split=0, train_percentage=0.8,
-                       min_other_objects=0, k_shot_generalization=0) -> {}:
+                       min_other_objects=0, k_shot_generalization=0, make_dev_set=False,
+                       cut_off_target_length=25) -> {}:
         """
         Generate a set of situations and generate all possible commands based on the current grammar and lexicon,
         match commands to situations based on relevance (if a command refers to a target object, it needs to be
@@ -1096,11 +1234,10 @@ class GroundedScan(object):
                 arguments = []
                 derivation.meaning(arguments)
                 assert len(arguments) == 1, "Only one target object currently supported."
-                # TODO: remove!
-                adverb = False
+                adverb = ""
                 for word in derivation.words():
                     if word in self._vocabulary.get_adverbs():
-                        adverb = True
+                        adverb = word
                 target_str, target_predicate = arguments.pop().to_predicate()
                 possible_target_objects = self.generate_possible_targets(
                     referred_size=self._vocabulary.translate_word(target_predicate["size"]),
@@ -1132,24 +1269,30 @@ class GroundedScan(object):
                                                         )
                         situation = self._world.get_current_situation()
                         assert situation.direction_to_target == relevant_situation["direction_to_target"]
+                        if situation.direction_to_target not in self._combined_directions:
+                            continue
                         assert situation.distance_to_target == relevant_situation["distance_to_target"]
+                        if situation.distance_to_target < 2:
+                            continue
                         target_commands, target_situations, target_action = self.demonstrate_command(
                             derivation, initial_situation=situation)
                         if i == idx_to_visualize:
                             visualize = True
                         if visualized_per_template >= visualize_per_template:
                             visualize = False
-                        # TODO: remove
                         if adverb and visualized_per_template <= visualize_per_template:
                             visualize = True
                         if split_type == "uniform":
                             if i in idx_for_train:
                                 splits = ["train"]
+                                if adverb != "hesitantly":
+                                    continue
                             else:
                                 splits = ["test"]
                         elif split_type == "generalization":
                             splits = self.assign_splits(target_size, target_color, target_shape, target_action,
-                                                        situation.direction_to_target, target_predicate)
+                                                        situation.direction_to_target, target_predicate,
+                                                        self._vocabulary.translate_word(adverb))
                             if len(splits) == 0:
                                 splits = ["train"]
                             elif len(splits) > 1:
@@ -1157,15 +1300,23 @@ class GroundedScan(object):
                                 self._world.clear_situation()
                                 continue
                             else:
-                                if visualized_per_split[splits[0]] <= visualize_per_split:
-                                    visualized_per_split[splits[0]] += 1
-                                    visualize = True
+                                if split_type == "generalization":
+                                    if visualized_per_split[splits[0]] <= visualize_per_split:
+                                        visualized_per_split[splits[0]] += 1
+                                        visualize = True
+                                if adverb != "hesitantly":
+                                    continue
+                        elif split_type == "target_lengths":
+                            if len(target_commands) > cut_off_target_length:
+                                splits = ["test"]
+                            else:
+                                splits = ["train"]
                         else:
                             raise ValueError("Unknown split_type in .get_data_pairs().")
                         self.fill_example(command=derivation.words(), derivation=derivation,
                                           situation=situation, target_commands=target_commands,
                                           verb_in_command=target_action, target_predicate=target_predicate,
-                                          visualize=visualize, splits=splits)
+                                          visualize=visualize, adverb=adverb, splits=splits)
                         for split in splits:
                             self._template_identifiers[split].append(template_num)
                         example_count += 1
@@ -1174,21 +1325,24 @@ class GroundedScan(object):
                         self._world.clear_situation()
         logger.info("Dropped {} examples due to belonging to multiple splits.".format(dropped_examples))
         if split_type == "generalization":
-            self.make_test_set()
+            self.make_test_set(percentage=(1 - self._percentage_train), type_set="test")
         logger.info("Discarding equivalent examples, may take a while...")
         equivalent_examples = self.discard_equivalent_examples()
         logger.info("Discarded {} examples from the test set that were already in the training set.".format(
             equivalent_examples))
 
+        if make_dev_set:
+            self.make_test_set(percentage=self._percentage_dev, type_set="dev")
+
         if k_shot_generalization > 0:
-            self.move_k_examples_to_train(k_shot_generalization)
+            self.move_k_examples_to_train(k_shot_generalization, split="adverb_1")
 
         # restore situation
         self.initialize_world(current_situation, mission=current_mission)
         return
 
     def assign_splits(self, target_size: str, target_color: str, target_shape: str, verb_in_command: str,
-                      direction_to_target: str, referred_target: dict):
+                      direction_to_target: str, referred_target: dict, manner: str):
         splits = []
         # Experiment 1: visual generalization, hold out all red squares as targets.
         if target_color == "red" and target_shape == "square":
@@ -1203,6 +1357,17 @@ class GroundedScan(object):
             splits.append("situational_2")
         # Experiment 4: contextual generalization, hold out all situations where interaction with a red square of
         # size 3 is required.
-        if verb_in_command in self._vocabulary.get_transitive_verbs() and target_shape == "square" and target_size == 3:
+        if self._vocabulary.translate_word(verb_in_command) == "push" and target_shape == "square" and target_size == 3:
             splits.append("contextual")
+        # Experiment 5: generalize adverb to new situations.
+        if manner == "cautiously":
+            splits.append("adverb_1")
+        # Experiment 6: generalize adverb to new verb 'pull'.
+        if (verb_in_command == self._vocabulary.translate_meaning("pull")
+                and manner == "while spinning"):
+            splits.append("adverb_2")
+        # Experiment 7: visual gen. easier, hold out all yellow squares as targets if also yellow in referred target.
+        if (self._vocabulary.translate_meaning("yellow") == referred_target["color"] and
+                target_color == "yellow" and target_shape == "square"):
+            splits.append("visual_easier")
         return splits
