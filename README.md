@@ -183,13 +183,13 @@ in `GroundedScan/dataset.py`
 ### Adverb Examples
 
 #### While Spinning
-![while spinning](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/While%20spinning/movie.gif)
+![while spinning](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Adverb%20to%20Verb/movie.gif?token=AGNMPFHDHADNGOYGRN6CD7S6KJ3RK)
 
 #### Cautiously
-![Cautiously](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/Cautiously/movie.gif)
+![Cautiously](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/Cautiously/movie.gif?token=AGNMPFDK7TM3YFUA73E3IJS6KJ3WG)
 
 #### Hesitantly
-![Hesitantly](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/Hesitantly/movie.gif)
+![Hesitantly](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/Hesitantly/movie.gif?token=AGNMPFCPAN46KUWQA2LVXXS6KJ3W4)
 
 #### While Zigzagging
-![while zigzagging](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/While%20zigzagging/movie.gif)
+![while zigzagging](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/While%20zigzagging/movie.gif?token=AGNMPFFIRPB6MA6U6AHLM2C6KJ3X2)
