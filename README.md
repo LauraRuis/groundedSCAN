@@ -14,6 +14,10 @@ Some instructions require interaction with particular kinds of objects.
 All data used in the paper can be found in compressed folders in `data`.
 To see how to read this data for a computational model and train models on it please refer t <TODO INSERT REPO>.
 
+## Extra Documentation
+
+Find glossary in `documentation/glossary.md`.
+
 ## Getting Started
 
 Make a virtualenvironment that uses Python 3.7 or higher:
@@ -122,7 +126,7 @@ Important semantics:
 
 ## Code-Flow Diagram
 For a schematic depiction of how exactly the code is setup see the following image:
-![Code flow](https://raw.githubusercontent.com/jacobandreas/grounded-scan/dev/documentation/Code-flow%20diagram.png)
+![Code flow](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/Code-flow%20diagram.png?token=AGNMPFARPDZY3LVMIVN2M6S6KJ4H4)
 
 
 ## Generalization
@@ -153,28 +157,39 @@ in `GroundedScan/dataset.py`
 
 ### Compositional Splits Examples
 #### Random Example
-![Grid World](https://raw.githubusercontent.com/jacobandreas/grounded-scan/dev/documentation/movie.gif)
+![Random Example](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/movie.gif?token=AGNMPFCZAXAM4TH77MS73A26KJ4GW)
 
 #### Visual (Red Squares)
+![Red Squares](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Red%20Squares/movie.gif?token=AGNMPFAUREUZZATVZSGE5S26KJ37I)
 
 #### Visual easier (Yellow Squares)
+![Yellow Squares](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Yellow%20Squares/movie.gif?token=AGNMPFEVCW5XHQRYYPW3ECK6KJ4AM)
 
 #### Situational 1 (Novel Direction)
+![Novel Direction](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Novel%20Direction/movie.gif?token=AGNMPFFTPMP7E7DFVXHFAV26KJ36M)
 
 #### Situational 2 (Relativity)
+![Relativity Size](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Relativity%20Size/movie.gif?token=AGNMPFFSAQDSZFFWFAG5RAK6KJ372)
 
 #### Contextual (Class Inference)
+![Latent Class Inference](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Latent%20Class%20Inference/movie.gif?token=AGNMPFDKBTTEOOZ7VDE2N6S6KJ34Y)
 
 #### Adverb 1 (Adverb cautiously k-shot)
+![Adverb 1](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Adverb%20k-shot/movie.gif?token=AGNMPFFMUI4NJDSUMZWDTJC6KJ33U)
 
 #### Adverb 2 (Adverb while spinning to verb pull)
+![Adverb 2](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Adverb%20to%20Verb/movie.gif?token=AGNMPFCVLPREDP73TJLTP3S6KJ34E)
 
 ### Adverb Examples
 
 #### While Spinning
+![while spinning](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Adverb%20to%20Verb/movie.gif?token=AGNMPFHDHADNGOYGRN6CD7S6KJ3RK)
 
 #### Cautiously
+![Cautiously](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/Cautiously/movie.gif?token=AGNMPFDK7TM3YFUA73E3IJS6KJ3WG)
 
 #### Hesitantly
+![Hesitantly](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/Hesitantly/movie.gif?token=AGNMPFCPAN46KUWQA2LVXXS6KJ3W4)
 
 #### While Zigzagging
+![while zigzagging](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/While%20zigzagging/movie.gif?token=AGNMPFFIRPB6MA6U6AHLM2C6KJ3X2)
