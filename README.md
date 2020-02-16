@@ -162,9 +162,6 @@ in `GroundedScan/dataset.py`
 ## Example gridworld command and demonstration
 
 ### Compositional Splits Examples
-#### Random Example
-![Random Example](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/movie.gif?token=AGNMPFCZAXAM4TH77MS73A26KJ4GW)
-
 #### Visual (Red Squares)
 ![Red Squares](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_split/Red%20Squares/movie.gif?token=AGNMPFAUREUZZATVZSGE5S26KJ37I)
 
