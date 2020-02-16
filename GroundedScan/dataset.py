@@ -1269,11 +1269,7 @@ class GroundedScan(object):
                                                         )
                         situation = self._world.get_current_situation()
                         assert situation.direction_to_target == relevant_situation["direction_to_target"]
-                        if situation.direction_to_target not in self._combined_directions:
-                            continue
                         assert situation.distance_to_target == relevant_situation["distance_to_target"]
-                        if situation.distance_to_target < 2:
-                            continue
                         target_commands, target_situations, target_action = self.demonstrate_command(
                             derivation, initial_situation=situation)
                         if i == idx_to_visualize:
@@ -1285,8 +1281,6 @@ class GroundedScan(object):
                         if split_type == "uniform":
                             if i in idx_for_train:
                                 splits = ["train"]
-                                if adverb != "hesitantly":
-                                    continue
                             else:
                                 splits = ["test"]
                         elif split_type == "generalization":
@@ -1304,8 +1298,6 @@ class GroundedScan(object):
                                     if visualized_per_split[splits[0]] <= visualize_per_split:
                                         visualized_per_split[splits[0]] += 1
                                         visualize = True
-                                if adverb != "hesitantly":
-                                    continue
                         elif split_type == "target_lengths":
                             if len(target_commands) > cut_off_target_length:
                                 splits = ["test"]
