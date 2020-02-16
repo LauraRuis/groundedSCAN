@@ -9,7 +9,7 @@ evaluated on its ability to follow one or more instructions in this environment.
 Some instructions require interaction with particular kinds of objects.
 
 ## TL;DR
-The data for the grounded SCAN paper is in the compressed folders in the folder `data` in this repository. This data can be used to train models with [this repository](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN).
+The data used in the grounded SCAN paper can be found in the folder `data` of this repository. This data can be used to train models with [the multi-modal baseline from the paper](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN).
 
 Random data examples (more at bottom of this file):
 
@@ -19,11 +19,11 @@ Random data examples (more at bottom of this file):
 ## Data for Paper
 
 All data used in the paper can be found in compressed folders in `data`.
-To see how to read this data for a computational model and train models on it please refer t <TODO INSERT REPO>.
+To see how to read this data for a computational model and train models on it please refer to [this repository](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN). Here the code for data generation, error analysis, and visualizing examples lives.
 
 ## Extra Documentation
 
-Find glossary in `documentation/glossary.md`.
+Find a term glossary in `documentation/glossary.md`.
 
 ## Getting Started
 
