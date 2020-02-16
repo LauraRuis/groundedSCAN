@@ -2,6 +2,7 @@
 The data for the grounded SCAN paper is in the compressed folders in the folder `data` in this repository.
 
 Random data example (more at bottom of this file):
+
 ![Random Example](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/movie.gif?token=AGNMPFCZAXAM4TH77MS73A26KJ4GW)
 
 # Grounded SCAN
