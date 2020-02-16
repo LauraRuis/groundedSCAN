@@ -9,7 +9,7 @@ evaluated on its ability to follow one or more instructions in this environment.
 Some instructions require interaction with particular kinds of objects.
 
 ## TL;DR
-The data for the grounded SCAN paper is in the compressed folders in the folder `data` in this repository.
+The data for the grounded SCAN paper is in the compressed folders in the folder `data` in this repository. This data can be used to train models with [this repository](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN).
 
 Random data examples (more at bottom of this file):
 
