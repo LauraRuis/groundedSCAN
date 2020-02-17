@@ -57,7 +57,7 @@ For an example dataset see the folder `data/compositional_splits.zip`, containin
 * `grid_size` specifies the number of columns and rows in the world. If set higher, more examples will be generated and the maximum target length will be higher.
 * `num_resampling` this determines how often you want to resample an example with the same specifications in terms of input instruction,
 target referrent, and relative position of the agent versus the target. If set to higher than 1, the code samples new random agent and target locations that still satisfy
-the constraints. Apart from setting a higher grid size, this parameter can be used to generate more data.
+the constraints. Like setting a higher grid size, this parameter can also be used to generate more data.
 * `split` determines for which splits we are generating data. Can be set to uniform (i.e. no systematic difference between training and test), 
 generalization (i.e. the compositional generalization splits), or target_lengths (i.e. generalizing to larger target lengths). For this
 latter split make sure to also set `cut_off_target_length`
