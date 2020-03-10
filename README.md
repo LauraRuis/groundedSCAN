@@ -11,7 +11,7 @@ Some instructions require interaction with particular kinds of objects.
 ## TL;DR
 The data used in the grounded SCAN paper can be found in the folder `data` of this repository. This data can be used to train models with [the multi-modal baseline from the paper](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN). The exact match accuracies reported in the paper can then be reproduced with the mode `error_analysis` in this repository.
 
-Some data examples (more at bottom of this file):
+Some data examples (more at bottom of this file, and a demo dataset can be found in `data/demo_dataset/.`):
 
 ![Random Example](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/movie.gif?token=AGNMPFEDNHCGBORTKISQV526N7N56)
 ![while zigzagging](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/While%20zigzagging/movie.gif?token=AGNMPFGUYKKOMTFIOLMQ42K6N7N7K)
