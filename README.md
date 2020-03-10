@@ -88,7 +88,7 @@ To make gifs of predictions use the mode `execute_commands`:
     (virtualenv) >> python3.7 -m GroundedScan --mode=execute_commands --load_dataset_from=compositional_splits/dataset.txt --output_directory=visualized_examples
     --predicted_commands_file=predict.json
  
-This will visualize the predictions in `predict.json` and visualize the execution in a gif in the specified output directory. **NB**: this will make one gif (including as many images as there are time-steps in that prediction) for each data point in `predict.json`. If you want to only inspect the errors, set `--only_save_errors`. The file `example_prediction.json` contains 1 data example with a prediction that can be used for trying out the error analysis and execute commands modes.
+This will visualize the predictions in `predict.json` that should be placed in the folder specified by `--output_directory` and visualize the execution in a gif in the specified output directory. **NB**: this will make one gif (including as many images as there are time-steps in that prediction) for each data point in `predict.json`. If you want to only inspect the errors, set `--only_save_errors`. The file `example_prediction.json` contains 1 data example with a prediction that can be used for trying out the error analysis and execute commands modes.
 
 ## Implementation Details
 
