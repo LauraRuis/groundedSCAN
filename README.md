@@ -45,6 +45,8 @@ In the folder `data/demo_dataset` a very small example dataset can be found that
 
 ```>> python3.7 -m GroundedScan --mode=generate --output_directory=data/dummy_dataset --num_resampling=1 --grid_size=4 --type_grammar=simple_intrans --nouns=circle,square --percentage_dev=0.1 --make_dev_set```
 
+See an demonstration of training a multi-modal neural model on this demo dataset [here](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN#demo-training-a-model-on-a-dummy-dataset).
+
 ## Using the Repository
 
 
