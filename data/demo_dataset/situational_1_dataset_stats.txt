@@ -1,0 +1,344 @@
+Number of examples: 450
+Number of examples of this split in train: 0
+Mean walking distance to target: 4.0
+Agent positions:
+Columns
+Row 0   (0, 0): 0           (1, 0): 44          (2, 0): 114         (3, 0): 152         
+
+Row 1   (0, 1): 0           (1, 1): 10          (2, 1): 26          (3, 1): 61          
+
+Row 2   (0, 2): 0           (1, 2): 6           (2, 2): 12          (3, 2): 25          
+
+Row 3   (0, 3): 0           (1, 3): 0           (2, 3): 0           (3, 3): 0           
+
+Target positions:
+Columns
+Row 0   (0, 0): 0           (1, 0): 0           (2, 0): 0           (3, 0): 0           
+
+Row 1   (0, 1): 52          (1, 1): 21          (2, 1): 7           (3, 1): 0           
+
+Row 2   (0, 2): 40          (1, 2): 29          (2, 2): 15          (3, 2): 0           
+
+Row 3   (0, 3): 209         (1, 3): 47          (2, 3): 30          (3, 3): 0           
+
+Verbs:
+Verb target combinations:
+ walk: 
+   1 red circle: 15
+   2 red circle: 15
+   3 red circle: 20
+   4 red circle: 15
+   1 green circle: 15
+   2 green circle: 15
+   3 green circle: 20
+   4 green circle: 15
+   1 green square: 15
+   2 green square: 20
+   3 green square: 20
+   4 green square: 15
+   1 yellow circle: 15
+   2 yellow circle: 15
+   3 yellow circle: 20
+   4 yellow circle: 15
+   1 blue circle: 15
+   2 blue circle: 15
+   3 blue circle: 20
+   4 blue circle: 15
+   1 blue square: 15
+   2 blue square: 20
+   3 blue square: 20
+   4 blue square: 15
+   2 yellow square: 15
+   3 yellow square: 15
+   4 yellow square: 10
+   1 yellow square: 10
+
+Adverbs:
+Adverb occurrences:
+Adverbs: 
+   : 450
+
+Verb adverb combinations:
+ None: 
+   walk: 450
+
+
+Referred Targets: 
+  red circle: 
+   1 red circle: 5
+   2 red circle: 5
+   3 red circle: 5
+   4 red circle: 5
+  green circle: 
+   1 green circle: 5
+   2 green circle: 5
+   3 green circle: 5
+   4 green circle: 5
+  green square: 
+   1 green square: 5
+   2 green square: 5
+   3 green square: 5
+   4 green square: 5
+  yellow circle: 
+   1 yellow circle: 5
+   2 yellow circle: 5
+   3 yellow circle: 5
+   4 yellow circle: 5
+  blue circle: 
+   1 blue circle: 5
+   2 blue circle: 5
+   3 blue circle: 5
+   4 blue circle: 5
+  blue square: 
+   1 blue square: 5
+   2 blue square: 5
+   3 blue square: 5
+   4 blue square: 5
+  big circle: 
+   2 yellow circle: 5
+   2 red circle: 5
+   2 green circle: 5
+   2 blue circle: 5
+   3 yellow circle: 5
+   3 red circle: 5
+   3 green circle: 5
+   3 blue circle: 5
+   4 yellow circle: 5
+   4 red circle: 5
+   4 green circle: 5
+   4 blue circle: 5
+  big square: 
+   2 yellow square: 5
+   2 green square: 5
+   2 blue square: 5
+   3 yellow square: 5
+   3 green square: 5
+   3 blue square: 5
+   4 yellow square: 5
+   4 green square: 5
+   4 blue square: 5
+  small circle: 
+   1 yellow circle: 5
+   1 red circle: 5
+   1 green circle: 5
+   1 blue circle: 5
+   3 yellow circle: 5
+   3 red circle: 5
+   3 green circle: 5
+   3 blue circle: 5
+  small square: 
+   1 yellow square: 5
+   1 green square: 5
+   1 blue square: 5
+   2 yellow square: 5
+   2 green square: 5
+   2 blue square: 5
+   3 yellow square: 5
+   3 green square: 5
+   3 blue square: 5
+  circle: 
+   1 yellow circle: 5
+   1 red circle: 5
+   1 green circle: 5
+   1 blue circle: 5
+   2 yellow circle: 5
+   2 red circle: 5
+   2 green circle: 5
+   2 blue circle: 5
+   3 yellow circle: 5
+   3 red circle: 5
+   3 green circle: 5
+   3 blue circle: 5
+   4 yellow circle: 5
+   4 red circle: 5
+   4 green circle: 5
+   4 blue circle: 5
+  square: 
+   1 yellow square: 5
+   1 green square: 5
+   1 blue square: 5
+   2 yellow square: 5
+   2 green square: 5
+   2 blue square: 5
+   3 yellow square: 5
+   3 green square: 5
+   3 blue square: 5
+   4 yellow square: 5
+   4 green square: 5
+   4 blue square: 5
+
+placed_targets: 
+   1 yellow circle: 15
+   1 yellow square: 10
+   1 red circle: 15
+   1 red square: 0
+   1 green circle: 15
+   1 green square: 15
+   1 blue circle: 15
+   1 blue square: 15
+   2 yellow circle: 15
+   2 yellow square: 15
+   2 red circle: 15
+   2 red square: 0
+   2 green circle: 15
+   2 green square: 20
+   2 blue circle: 15
+   2 blue square: 20
+   3 yellow circle: 20
+   3 yellow square: 15
+   3 red circle: 20
+   3 red square: 0
+   3 green circle: 20
+   3 green square: 20
+   3 blue circle: 20
+   3 blue square: 20
+   4 yellow circle: 15
+   4 yellow square: 10
+   4 red circle: 15
+   4 red square: 0
+   4 green circle: 15
+   4 green square: 15
+   4 blue circle: 15
+   4 blue square: 15
+
+Objects placed in the world for particular referenced objects: 
+  shape: 
+   1: 140
+  shape: 
+   1 yellow circle: 5
+   1 red circle: 5
+   1 green circle: 5
+   1 blue circle: 5
+   2 yellow circle: 5
+   2 red circle: 5
+   2 green circle: 5
+   2 blue circle: 5
+   3 yellow circle: 5
+   3 red circle: 5
+   3 green circle: 5
+   3 blue circle: 5
+   4 yellow circle: 5
+   4 red circle: 5
+   4 green circle: 5
+   4 blue circle: 5
+   1 yellow square: 5
+   1 green square: 5
+   1 blue square: 5
+   2 yellow square: 5
+   2 green square: 5
+   2 blue square: 5
+   3 yellow square: 5
+   3 green square: 5
+   3 blue square: 5
+   4 yellow square: 5
+   4 green square: 5
+   4 blue square: 5
+  color,shape: 
+   4: 120
+  color,shape: 
+   1 red circle: 14
+   3 blue square: 21
+   4 yellow circle: 14
+   2 green square: 13
+   2 yellow square: 18
+   2 blue circle: 21
+   4 green square: 18
+   2 red square: 7
+   4 yellow square: 13
+   2 green circle: 14
+   4 red square: 16
+   1 yellow square: 8
+   1 green square: 15
+   3 blue circle: 12
+   2 red circle: 13
+   3 red square: 12
+   3 yellow square: 12
+   3 yellow circle: 20
+   1 green circle: 18
+   4 blue circle: 19
+   3 red circle: 14
+   3 green circle: 20
+   1 blue circle: 18
+   3 green square: 20
+   4 green circle: 18
+   2 yellow circle: 9
+   4 red circle: 13
+   2 blue square: 11
+   1 red square: 19
+   1 yellow circle: 15
+   1 blue square: 15
+   4 blue square: 10
+  size,shape: 
+   8: 190
+  size,shape: 
+   2 yellow circle: 44
+   1 yellow circle: 45
+   1 red circle: 65
+   1 blue circle: 59
+   1 green circle: 65
+   4 blue square: 44
+   2 blue square: 51
+   4 green square: 63
+   1 green square: 56
+   2 green square: 42
+   4 red square: 41
+   3 red square: 35
+   1 yellow square: 51
+   4 yellow square: 65
+   2 red square: 38
+   2 red circle: 47
+   2 yellow square: 42
+   3 green square: 47
+   1 red square: 38
+   3 yellow square: 46
+   2 green circle: 43
+   1 blue square: 49
+   3 blue square: 50
+   2 blue circle: 37
+   3 yellow circle: 32
+   3 red circle: 41
+   3 green circle: 40
+   3 blue circle: 48
+   4 yellow circle: 43
+   4 red circle: 45
+   4 green circle: 48
+   4 blue circle: 60
+  size,color,shape: 
+  size,color,shape: 
+  all: 
+   4: 120
+   8: 190
+   1: 140
+  all: 
+   1 red circle: 84
+   3 blue square: 76
+   4 yellow circle: 62
+   2 green square: 60
+   2 yellow square: 65
+   2 blue circle: 63
+   4 green square: 86
+   2 red square: 45
+   4 yellow square: 83
+   2 green circle: 62
+   4 red square: 57
+   1 yellow square: 64
+   1 green square: 76
+   3 blue circle: 65
+   2 red circle: 65
+   3 red square: 47
+   3 yellow square: 63
+   3 yellow circle: 57
+   1 green circle: 88
+   4 blue circle: 84
+   3 red circle: 60
+   3 green circle: 65
+   1 blue circle: 82
+   3 green square: 72
+   4 green circle: 71
+   2 yellow circle: 58
+   4 red circle: 63
+   2 blue square: 67
+   1 red square: 57
+   1 yellow circle: 65
+   1 blue square: 69
+   4 blue square: 59
