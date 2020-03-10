@@ -1,0 +1,151 @@
+Number of examples: 108
+Number of examples of this split in train: 0
+Mean walking distance to target: 3.111111111111111
+Agent positions:
+Columns
+Row 0   (0, 0): 14          (1, 0): 4           (2, 0): 6           (3, 0): 5           
+
+Row 1   (0, 1): 3           (1, 1): 9           (2, 1): 10          (3, 1): 5           
+
+Row 2   (0, 2): 5           (1, 2): 6           (2, 2): 3           (3, 2): 3           
+
+Row 3   (0, 3): 12          (1, 3): 9           (2, 3): 4           (3, 3): 10          
+
+Target positions:
+Columns
+Row 0   (0, 0): 12          (1, 0): 9           (2, 0): 7           (3, 0): 16          
+
+Row 1   (0, 1): 9           (1, 1): 5           (2, 1): 5           (3, 1): 6           
+
+Row 2   (0, 2): 4           (1, 2): 1           (2, 2): 5           (3, 2): 7           
+
+Row 3   (0, 3): 2           (1, 3): 3           (2, 3): 8           (3, 3): 9           
+
+Verbs:
+Verb target combinations:
+ walk: 
+   2 yellow circle: 27
+   2 red circle: 27
+   2 blue circle: 27
+   2 green circle: 27
+
+Adverbs:
+Adverb occurrences:
+Adverbs: 
+   : 108
+
+Verb adverb combinations:
+ None: 
+   walk: 108
+
+
+Referred Targets: 
+  small circle: 
+   2 yellow circle: 27
+   2 red circle: 27
+   2 blue circle: 27
+   2 green circle: 27
+
+placed_targets: 
+   1 yellow square: 0
+   1 yellow circle: 0
+   1 red square: 0
+   1 red circle: 0
+   1 blue square: 0
+   1 blue circle: 0
+   1 green square: 0
+   1 green circle: 0
+   2 yellow square: 0
+   2 yellow circle: 27
+   2 red square: 0
+   2 red circle: 27
+   2 blue square: 0
+   2 blue circle: 27
+   2 green square: 0
+   2 green circle: 27
+   3 yellow square: 0
+   3 yellow circle: 0
+   3 red square: 0
+   3 red circle: 0
+   3 blue square: 0
+   3 blue circle: 0
+   3 green square: 0
+   3 green circle: 0
+   4 yellow square: 0
+   4 yellow circle: 0
+   4 red square: 0
+   4 red circle: 0
+   4 blue square: 0
+   4 blue circle: 0
+   4 green square: 0
+   4 green circle: 0
+
+Objects placed in the world for particular referenced objects: 
+  shape: 
+  shape: 
+  color,shape: 
+  color,shape: 
+  size,shape: 
+   8: 108
+  size,shape: 
+   2 yellow circle: 27
+   4 yellow circle: 45
+   4 yellow square: 31
+   2 blue square: 25
+   4 blue square: 22
+   4 green square: 20
+   3 blue square: 21
+   3 green square: 30
+   4 red circle: 48
+   3 yellow circle: 44
+   4 blue circle: 42
+   2 red square: 34
+   3 red square: 30
+   3 green circle: 50
+   3 red circle: 37
+   2 yellow square: 25
+   1 green square: 24
+   1 red square: 29
+   4 green circle: 51
+   3 blue circle: 43
+   1 blue square: 28
+   2 green square: 16
+   4 red square: 23
+   3 yellow square: 22
+   1 yellow square: 16
+   2 red circle: 27
+   2 blue circle: 27
+   2 green circle: 27
+  size,color,shape: 
+  size,color,shape: 
+  all: 
+   8: 108
+  all: 
+   2 yellow circle: 27
+   4 yellow circle: 45
+   4 yellow square: 31
+   2 blue square: 25
+   4 blue square: 22
+   4 green square: 20
+   3 blue square: 21
+   3 green square: 30
+   4 red circle: 48
+   3 yellow circle: 44
+   4 blue circle: 42
+   2 red square: 34
+   3 red square: 30
+   3 green circle: 50
+   3 red circle: 37
+   2 yellow square: 25
+   1 green square: 24
+   1 red square: 29
+   4 green circle: 51
+   3 blue circle: 43
+   1 blue square: 28
+   2 green square: 16
+   4 red square: 23
+   3 yellow square: 22
+   1 yellow square: 16
+   2 red circle: 27
+   2 blue circle: 27
+   2 green circle: 27
