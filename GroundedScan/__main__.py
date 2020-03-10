@@ -219,6 +219,12 @@ def main():
                                          save_directory=save_plots_in)
             logger.info("Wrote data to path: {}.".format(os.path.join(save_plots_in, "error_analysis.txt")))
             logger.info("Saved plots in directory: {}.".format(save_plots_in))
+    elif flags['mode'] == 'write_data_statistics':
+        grounded_scan = GroundedScan.load_dataset_from_file(flags["load_dataset_from"],
+                                                            flags["output_directory"])
+        logger.info("Writing statistics to {}".format(flags["output_directory"]))
+        for split in grounded_scan._possible_splits:
+            grounded_scan.save_dataset_statistics(split=split)
     else:
         raise ValueError("Unknown value for command-line argument 'mode'={}.".format(flags['mode']))
 

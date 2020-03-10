@@ -13,7 +13,6 @@ import random
 import itertools
 import logging
 from copy import deepcopy
-import xlwt
 from xlwt import Workbook
 
 logger = logging.getLogger("GroundedScan")
@@ -97,6 +96,9 @@ class GroundedScan(object):
         self._examples_to_visualize = []
         self._k_shot_examples_in_train = Counter()
         self._data_statistics = {split: self.get_empty_data_statistics() for split in self._possible_splits}
+        self._coverage_commands = {split: {} for split in self._possible_splits}
+        self._coverage_worlds = {split: {} for split in self._possible_splits}
+        self._coverage_full = {split: {} for split in self._possible_splits}
 
     def reset_dataset(self):
         self._grammar.reset_grammar()
@@ -304,7 +306,6 @@ class GroundedScan(object):
 
     def update_data_statistics(self, data_example, split="train"):
         """Keeps track of certain statistics regarding the data pairs generated."""
-
         # Update the statistics regarding the situation.
         self._data_statistics[split]["distance_to_target"][int(data_example["situation"]["distance_to_target"])] += 1
         self._data_statistics[split]["direction_to_target"][data_example["situation"]["direction_to_target"]] += 1
@@ -325,18 +326,38 @@ class GroundedScan(object):
         # Update the statistics regarding the command.
         self._data_statistics[split]["verbs_in_command"][data_example["verb_in_command"]] += 1
         manner = data_example.get("manner")
+        if not manner:
+            manner = ""
+            for manner_ref in self._vocabulary.get_adverbs():
+                if manner_ref in data_example["command"]:
+                    manner = manner_ref
         self._data_statistics[split]["manners_in_command"][manner] += 1
-        self._data_statistics[split]["referred_targets"][data_example.get("referred_target")][placed_target] += 1
+        referred_target = data_example.get("referred_target")
+        if referred_target:
+            referred_target = referred_target.split()
+        else:
+            size_ref = ""
+            for size_adj in self._vocabulary.get_size_adjectives():
+                if size_adj in data_example["command"]:
+                    size_ref = size_adj
+            color_ref = ""
+            for color_adj in self._vocabulary.get_color_adjectives():
+                if color_adj in data_example["command"]:
+                    color_ref = color_adj
+            shape_ref = ""
+            for shape_noun in self._vocabulary.get_nouns():
+                if shape_noun in data_example["command"]:
+                    color_ref = shape_noun
+            referred_target = [size_ref, color_ref, shape_ref]
+            referred_target = ' '.join(referred_target).split()
+
+        self._data_statistics[split]["referred_targets"][' '.join(referred_target)][placed_target] += 1
         self._data_statistics[split]["verb_adverb_combinations"][manner][data_example["verb_in_command"]] += 1
         self._data_statistics[split]["verb_target_combinations"][data_example["verb_in_command"]][placed_target] += 1
         self._data_statistics[split]["input_length"][len(data_example["command"].split(','))] += 1
 
         self._data_statistics[split]["target_length"][len(data_example["target_commands"].split(','))] += 1
-        referred_target = data_example.get("referred_target")
-        if referred_target:
-            referred_target = referred_target.split()
-        else:
-            referred_target = [""]
+
         if len(referred_target) == 3:
             referred_categories = "size,color,shape"
         elif len(referred_target) == 1:
@@ -354,6 +375,24 @@ class GroundedScan(object):
                                       placed_object['object']['shape']])
             self._data_statistics[split]["situations"][referred_categories]["objects_in_world"][placed_object] += 1
             self._data_statistics[split]["situations"]["all"]["objects_in_world"][placed_object] += 1
+
+        referred_target = " ".join(referred_target)
+        unique_command_str = '_'.join([data_example["verb_in_command"], referred_target,
+                                       manner])
+        if not self._coverage_commands[split].get(unique_command_str):
+            self._coverage_commands[split][unique_command_str] = 0
+        self._coverage_commands[split][unique_command_str] += 1
+        target_position = ' '.join([str(data_example["situation"]["target_object"]["position"]["column"]),
+                                    str(data_example["situation"]["target_object"]["position"]["row"])])
+        unique_situation_str = '_'.join([placed_target, target_position])
+        if not self._coverage_worlds[split].get(unique_situation_str):
+            self._coverage_worlds[split][unique_situation_str] = 0
+        self._coverage_worlds[split][unique_situation_str] += 1
+        if not self._coverage_full[split].get(unique_command_str):
+            self._coverage_full[split][unique_command_str] = {}
+        if not self._coverage_full[split][unique_command_str].get(unique_situation_str):
+            self._coverage_full[split][unique_command_str][unique_situation_str] = 0
+        self._coverage_full[split][unique_command_str][unique_situation_str] += 1
 
     def save_position_counts(self, position_counts, file) -> {}:
         """
@@ -376,6 +415,36 @@ class GroundedScan(object):
             file.write("\n")
             file.write("\n")
 
+    @staticmethod
+    def write_counter_sheet(sheet, test_counter, train_counter):
+        sheet.write(0, 1, "Amount in test")
+        sheet.write(0, 2, "Amount in train")
+        # check coverage in train
+        for i, (train_key, train_count) in enumerate(train_counter.items()):
+            num_in_test = test_counter[train_key]
+            if not isinstance(num_in_test, int):
+                num_in_test = sum(num_in_test.values())
+                train_count = sum(train_count.values())
+            sheet.write(1 + i, 0, train_key)
+            sheet.write(1 + i, 1, num_in_test)
+            sheet.write(1 + i, 2, train_count)
+
+    @staticmethod
+    def write_nested_counter_sheet(sheet, test_counter, train_counter):
+        sheet.write(0, 1, "Amount in test")
+        sheet.write(0, 2, "Amount in train")
+        # check coverage in train
+        row_count = 1
+        for i, (train_key, train_counter) in enumerate(train_counter.items()):
+            test_counter = test_counter[train_key]
+            for key, count in train_counter.items():
+                combination = " ".join([train_key, key])
+                test_count = test_counter[key]
+                sheet.write(row_count, 0, combination)
+                sheet.write(row_count, 1, test_count)
+                sheet.write(row_count, 2, count)
+                row_count += 1
+
     def save_dataset_statistics(self, split="train") -> {}:
         """
         Summarizes the statistics and saves and prints them.
@@ -383,12 +452,12 @@ class GroundedScan(object):
         examples = self._data_pairs[split]
         for example in examples:
             self.update_data_statistics(example, split)
+        # General statistics
+        number_of_examples = len(self._data_pairs[split])
+        if number_of_examples == 0:
+            logger.info("WARNING: trying to save dataset statistics for an empty split {}.".format(split))
+            return
         with open(os.path.join(self.save_directory, split + "_dataset_stats.txt"), 'w') as infile:
-            # General statistics
-            number_of_examples = len(self._data_pairs[split])
-            if number_of_examples == 0:
-                logger.info("WARNING: trying to save dataset statistics for an empty split {}.".format(split))
-                return
             infile.write("Number of examples: {}\n".format(number_of_examples))
             infile.write("Number of examples of this split in train: {}\n".format(
                 str(self._k_shot_examples_in_train[split])))
@@ -407,6 +476,8 @@ class GroundedScan(object):
             verb_target_combinations = self._data_statistics[split]["verb_target_combinations"]
             infile.write("Verb target combinations:\n")
             for key, values in verb_target_combinations.items():
+                if not key:
+                    key = "None"
                 save_counter(" " + key, values, infile)
             infile.write("\n")
 
@@ -418,11 +489,15 @@ class GroundedScan(object):
             verb_adverb_combinations = self._data_statistics[split]["verb_adverb_combinations"]
             infile.write("Verb adverb combinations:\n")
             for key, values in verb_adverb_combinations.items():
+                if not key:
+                    key = "None"
                 save_counter(" " + key, values, infile)
             infile.write("\n")
             referred_targets = self._data_statistics[split]["referred_targets"]
             infile.write("\nReferred Targets: \n")
             for key, values in referred_targets.items():
+                if not key:
+                    key = "None"
                 save_counter("  " + key, values, infile)
             placed_targets = self._data_statistics[split]["placed_targets"]
             infile.write("\n")
@@ -430,8 +505,48 @@ class GroundedScan(object):
             situation_stats = self._data_statistics[split]["situations"]
             infile.write("\nObjects placed in the world for particular referenced objects: \n")
             for key, values in situation_stats.items():
+                if not key:
+                    key = "None"
                 save_counter("  " + key, values["num_objects_placed"], infile)
                 save_counter("  " + key, values["objects_in_world"], infile)
+
+        workbook = Workbook()
+        sheet = workbook.add_sheet("Coverage Commands")
+        sheet.write(0, 0, "Command")
+        sheet.write(0, 1, "Num occurrence")
+        # Coverage Statistics
+        for i, (command, count) in enumerate(self._coverage_commands[split].items()):
+            sheet.write(1 + i, 0, command)
+            sheet.write(1 + i, 1, count)
+        sheet = workbook.add_sheet("Coverage World States")
+        sheet.write(0, 0, "World State")
+        sheet.write(0, 1, "Num occurrence")
+        # Coverage Statistics
+        for i, (command, count) in enumerate(self._coverage_worlds[split].items()):
+            sheet.write(1 + i, 0, command)
+            sheet.write(1 + i, 1, count)
+        sheet = workbook.add_sheet("World states per command")
+        sheet.write(0, 0, "Command")
+        sheet.write(0, 1, "Num unique world states")
+        sheet.write(0, 2, "Num total world states")
+        for i, (unique_command, world_states) in enumerate(self._coverage_full[split].items()):
+            sheet.write(1 + i, 0, unique_command)
+            sheet.write(1 + i, 1, len(world_states))
+            sheet.write(1 + i, 2, sum(world_states.values()))
+        if split == "target_lengths":
+            keys_to_add = ["verbs_in_command", "manners_in_command",
+                           "referred_targets", "placed_targets", "direction_to_target"]
+            for key in keys_to_add:
+                sheet = workbook.add_sheet(key.replace("_", " "))
+                sheet.write(0, 0, key)
+                self.write_counter_sheet(sheet, self._data_statistics[split][key],
+                                         self._data_statistics["train"][key])
+            sheet = workbook.add_sheet("verb adverb combinations")
+            sheet.write(0, 0, "verb_adverb_combinations")
+            self.write_nested_counter_sheet(sheet, self._data_statistics[split]["verb_adverb_combinations"],
+                                            self._data_statistics["train"]["verb_adverb_combinations"])
+        outfile_excel = os.path.join(self.save_directory, split + "_dataset_stats.xls")
+        workbook.save(outfile_excel)
 
         for key, values in self._data_statistics[split]["situations"].items():
             if len(values["objects_in_world"]):
@@ -453,6 +568,7 @@ class GroundedScan(object):
                  os.path.join(self.save_directory, split + "_" + "target_lengths.png"))
         bar_plot(self._data_statistics[split]["input_length"], "input_lengths",
                  os.path.join(self.save_directory, split + "_" + "input_lengths.png"))
+
 
     def save_dataset(self, file_name: str) -> str:
         """
@@ -505,15 +621,16 @@ class GroundedScan(object):
                 for i, example in enumerate(examples):
                     if i in k_random_indices:
                         dataset._data_pairs["train"].append(example)
-                        dataset.update_data_statistics(example, "train")
+                        # dataset.update_data_statistics(example, "train")
                         dataset._data_pairs["dev"].append(example)
-                        dataset.update_data_statistics(example, "dev")
+                        # dataset.update_data_statistics(example, "dev")
                     else:
                         dataset._data_pairs[split].append(example)
-                        dataset.update_data_statistics(example, split)
+                        # dataset.update_data_statistics(example, split)
                     if split == "train" and dataset._vocabulary.translate_meaning("cautiously") in example["command"]:
-                        dataset._data_pairs["dev"].append(example)
-                        dataset.update_data_statistics(example, "dev")
+                        if dataset._vocabulary.translate_meaning("cautiously"):
+                            dataset._data_pairs["dev"].append(example)
+                            # dataset.update_data_statistics(example, "dev")
             return dataset
 
     def generate_all_commands(self) -> {}:
