@@ -1,6 +1,6 @@
 # Grounded SCAN
 
-This repository contains the code for generating the grounded SCAN benchmark.
+This repository contains the code for generating the [grounded SCAN benchmark](https://arxiv.org/abs/2003.05161).
 Grounded SCAN poses a simple task, where an agent must execute action sequences based on a synthetic language instruction.
 
 The agent is presented with a simple grid world containing a collection of
@@ -9,7 +9,7 @@ evaluated on its ability to follow one or more instructions in this environment.
 Some instructions require interaction with particular kinds of objects.
 
 ## TL;DR
-The data used in the grounded SCAN paper can be found in the folder `data` of this repository. This data can be used to train models with [the multi-modal baseline from the paper](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN). The exact match accuracies reported in the paper can then be reproduced with the mode `error_analysis` in this repository.
+The data used in [the grounded SCAN paper](https://arxiv.org/abs/2003.05161) can be found in the folder `data` of this repository. This data can be used to train models with [the multi-modal baseline from the paper](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN). The exact match accuracies reported in the paper can then be reproduced with the mode `error_analysis` in this repository.
 
 Some data examples (more at bottom of this file, and a demo dataset can be found in `data/demo_dataset/.`):
 
