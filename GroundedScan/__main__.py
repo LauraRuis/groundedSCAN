@@ -18,7 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description="Grounded SCAN")
 
     # General arguments.
-    parser.add_argument('--mode', type=str, default='execute_commands',
+    parser.add_argument('--mode', type=str, default='test',
                         help='Generate (mode=generate) data, run tests (mode=test), analyse the end positions of'
                              ' predictions compared to ground truth end positions (mode=position_analysis) '
                              ' or execute commands from a file (mode=execute_commands).')
@@ -48,6 +48,8 @@ def main():
                                                                        'locations).')
     parser.add_argument('--visualize_per_template', type=int, default=0, help='How many visualization to generate per '
                                                                               'command template.')
+    parser.add_argument('--max_examples_per_template', type=int, default=-1,
+                        help='How many examples to generate per command template maximally.')
     parser.add_argument('--visualize_per_split', type=int, default=0, help='How many visualization to generate per '
                                                                            'test split.')
     parser.add_argument('--percentage_train', type=float, default=.7,
@@ -147,7 +149,8 @@ def main():
                                      min_other_objects=flags['min_other_objects'],
                                      k_shot_generalization=flags['k_shot_generalization'],
                                      make_dev_set=flags["make_dev_set"],
-                                     cut_off_target_length=flags["cut_off_target_length"])
+                                     cut_off_target_length=flags["cut_off_target_length"],
+                                     max_examples_per_template=flags["max_examples_per_template"])
         logger.info("Gathering dataset statistics...")
         grounded_scan.save_dataset_statistics(split="train")
         if flags["split"] == "uniform" or flags["split"] == "target_lengths":
@@ -201,9 +204,9 @@ def main():
         workbook.save(outfile_excel)
         logger.info("Done.")
     elif flags['mode'] == 'test':
-        logger.info("Running all tests..")
+        logger.info("RunningGroundedScan/__main__.py:206 all tests..")
         run_all_tests()
-    elif flags['mode'] == 'error_analysis':
+    elif flags['mode'] == 'eself._target_object.vectorrror_analysis':
         files = flags["predicted_commands_files"].split(",")
         for file in files:
             file_name = file.split(".json")[0]

@@ -459,6 +459,17 @@ class World(MiniGridEnv):
         self.agent_start_pos = (0, 0)
         self.agent_start_dir = DIR_TO_INT[EAST]
         self.mission = None
+        self.manner = None
+        self.verb = None
+        self.is_transitive = None
+        self.end_pos = (0, 0)
+        self.previous_pos = []
+        self.required_push = 0
+        self.required_pull = 0
+        self.finished = False
+        self.finished_adverb = False
+        self.not_zigzagged = 0
+        self.num_expert_instructions = 0
 
         # Generate the object vocabulary.
         self._object_vocabulary = object_vocabulary
@@ -611,6 +622,9 @@ class World(MiniGridEnv):
             # Add to occupied positions:
             self._occupied_positions.add((position.column, position.row))
 
+            if self._target_object:
+                if np.array_equal(object_vector, self._target_object.vector):
+                    target = True
             if target:
                 self._target_object = positioned_object
 
@@ -712,7 +726,14 @@ class World(MiniGridEnv):
                             self.take_step_in_direction(direction, primitive_command)
                         else:
                             self.pull(position=new_position)
-
+                    else:
+                        # Pushing an object that won't move just yet (because it's heavy).
+                        self._observed_commands.append(primitive_command)
+                        self._observed_situations.append(self.get_current_situation())
+                else:
+                    # Pushing an object that won't move just yet (because it's heavy).
+                    self._observed_commands.append(primitive_command)
+                    self._observed_situations.append(self.get_current_situation())
             else:
                 # Pushing an object that won't move just yet (because it's heavy).
                 self._observed_commands.append(primitive_command)
@@ -760,9 +781,110 @@ class World(MiniGridEnv):
         else:
             return "NW", self.actions.left
 
+    def take_action(self, command_str: str, simple_situation_representation=True) -> (np.array, float):
+        """Execute a command and return the new state and reward (a -> s', r)."""
+        self.execute_command(command_str)
+        if simple_situation_representation:
+            new_situation = self.get_current_situation_grid_repr()
+        else:
+            new_situation = self.get_current_situation_image()
+        reward = self.calculate_reward()
+        return new_situation, reward
+
+    def check_manner(self, after=False):
+        if self.manner == "cautiously":
+            sequences = ["turn right, turn left, turn left, turn right",
+                         "turn left, turn right, turn right, turn left"]
+            command_length = 4
+            pass
+        elif self.manner == "while spinning":
+            sequences = ["turn left, turn left, turn left, turn left",
+                         "turn right, turn right, turn right, turn right"]
+            command_length = 4
+            pass
+        elif self.manner == "hesitantly":
+            sequences = ["stay"]
+            command_length = 1
+            pass
+        elif self.manner == "while zigzagging":
+            if self.not_zigzagged == 0:
+                return True
+            else:
+                return False
+        else:
+            raise ValueError("Unknown manner {}".format(self.manner))
+        previous_step = 0
+        for i, command in enumerate(self._observed_commands):
+            if command in ["push", "pull", "walk"]:
+                # if manner while spinning find action sequence between previous and current action push, pull, or walk
+                next_step = i
+                # if manner is cautiously find action sequence directly before action push, pull, or walk
+                if self.manner == "cautiously":
+                    previous_step = next_step - command_length
+                # if manner is hesitantly find action sequence between current and next action push, pull, or walk
+                elif self.manner == "hesitantly":
+                    previous_step = next_step
+                    next_step = len(self._observed_commands)
+                    if previous_step < len(self._observed_commands) - 1:
+                        for j, command_j in enumerate(self._observed_commands[i + 1:]):
+                            if command_j in ["push", "pull", "walk"]:
+                                next_step = j + i + 1
+                                break
+                current_sequence = ", ".join(self._observed_commands[previous_step:next_step])
+                sequence_fails = 0
+                for sequence in sequences:
+                    if sequence not in current_sequence:
+                        sequence_fails += 1
+                if sequence_fails == len(sequences):
+                    return False
+                # update pointer to previous action (walk, push, or pull)
+                previous_step = next_step
+        return True
+
+    def path_length_penalty(self):
+        """Returns 1 if actions taken by agent < expert actions, returns <1 if agent took more actions than expert."""
+        num_actions_agent = len(self._observed_commands)
+        num_actions_expert = self.num_expert_instructions
+        return num_actions_expert / max(num_actions_agent, num_actions_expert)
+
+    def calculate_reward(self) -> float:
+        reward = 0
+
+        # if target object and agent in right place add reward
+        if tuple(self.agent_pos) == self.end_pos \
+                and (self._target_object.position.column,
+                     self._target_object.position.row) == self.end_pos and not self.finished:
+            # subtract reward if it took too many push / pull actions to get there
+            if self.is_transitive:
+                executed_push = self._observed_commands.count("push")
+                executed_pull = self._observed_commands.count("pull")
+                if executed_push != self.required_push or executed_pull != self.required_pull:
+                    reward -= 0.5
+            self.finished = True
+
+            # If no manner, agent is done.
+            if not self.manner:
+                reward += 1
+            # Otherwise, check if manner is executed correctly yet.
+            else:
+                passed_adverb_check = self.check_manner()
+                if passed_adverb_check:
+                    self.finished_adverb = True
+                    reward += 1
+
+        # If agent and object in correct location but manner sequence not correct yet, check sequence again.
+        if self.finished and not self.finished_adverb and self.manner:
+            passed_adverb_check = self.check_manner()
+            if passed_adverb_check:
+                self.finished_adverb = True
+                reward += 1
+
+        return max(0, reward * self.path_length_penalty())
+
     def execute_command(self, command_str: str):
         command_list = command_str.split()
         verb = command_list[0]
+        previous_agent_pos = (self.agent_pos[0], self.agent_pos[1])
         if len(command_list) > 1 and verb == "turn":
             direction = command_list[1]
             if direction == "left":
@@ -775,12 +897,28 @@ class World(MiniGridEnv):
             self.take_step_in_direction(direction=DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]],
                                         primitive_command=verb)
         elif verb == "push" or verb == "pull":
-            self.push_or_pull_object(direction=DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]],
+            if verb == "push":
+                direction = DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]]
+            else:
+                direction = DIR_STR_TO_DIR[INT_TO_DIR[(self.agent_dir + 2) % 4].name[0]]
+            self.push_or_pull_object(direction=direction,
                                      primitive_command=verb)
         elif verb == "stay":
+            self._observed_commands.append("stay")
+            self._observed_situations.append(self.get_current_situation())
             return
         else:
             raise ValueError("Incorrect command {}.".format(command_str))
+        if tuple(self.agent_pos) != previous_agent_pos:
+            self.previous_pos.append(previous_agent_pos)
+            # only save last 2 positions
+            if len(self.previous_pos) > 2:
+                self.previous_pos = self.previous_pos[-2:]
+            if self.manner == "while zigzagging" and not self.agent_in_line_with_goal(
+                    Position(column=self.end_pos[0], row=self.end_pos[1]), other_current_pos=self.previous_pos[-1])\
+                    and len(self.previous_pos) == 2:
+                if self.agent_pos[0] == self.previous_pos[-2][0] or self.agent_pos[1] == self.previous_pos[-2][1]:
+                    self.not_zigzagged += 1
 
     def empty_cell_in_direction(self, direction: Direction):
         next_cell = self.agent_pos + DIR_TO_VEC[DIR_TO_INT[direction]]
@@ -889,8 +1027,11 @@ class World(MiniGridEnv):
             object_locations = object_locations.items()
         return object_locations
 
-    def agent_in_line_with_goal(self, goal: Position):
-        return goal.column == self.agent_pos[0] or goal.row == self.agent_pos[1]
+    def agent_in_line_with_goal(self, goal: Position, other_current_pos=None):
+        if not other_current_pos:
+            return goal.column == self.agent_pos[0] or goal.row == self.agent_pos[1]
+        else:
+            return goal.column == other_current_pos[0] or goal.row == other_current_pos[1]
 
     def take_step(self, action, observed_command: str):
         self.step(action=action)
@@ -934,8 +1075,8 @@ class World(MiniGridEnv):
             self.turn_to_direction(direction)
         if self.within_grid(Position(column=self.front_pos[0], row=self.front_pos[1])):
             self.step(action=self.actions.forward)
-            self._observed_commands.append(primitive_command)
-            self._observed_situations.append(self.get_current_situation())
+        self._observed_commands.append(primitive_command)
+        self._observed_situations.append(self.get_current_situation())
 
     def save_situation(self, file_name, attention_weights=[]) -> str:
         save_location = os.path.join(self.save_directory, file_name)
@@ -979,8 +1120,19 @@ class World(MiniGridEnv):
         self._observed_commands.clear()
         self._observed_situations.clear()
         self._occupied_positions.clear()
+        self.previous_pos.clear()
+        self.not_zigzagged = 0
+        self.finished = False
+        self.finished_adverb = False
         self.reset()
 
-    def set_mission(self, mission: str):
+    def set_mission(self, mission: str, manner: str, verb: str, is_transitive: bool,
+                    end_pos: Tuple[int, int], required_push: int, required_pull: int, num_instructions: int):
         self.mission = mission
-
+        self.manner = manner
+        self.verb = verb
+        self.is_transitive = is_transitive
+        self.end_pos = end_pos
+        self.required_push = required_push
+        self.required_pull = required_pull
+        self.num_expert_instructions = num_instructions

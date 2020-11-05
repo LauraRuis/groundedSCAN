@@ -98,6 +98,8 @@ class WorldObj:
         self.momentum = 0
         self.weight = weight
         self.momentum_threshold = WEIGHT_TO_MOMENTUM[self.weight]
+        self.pushed = False
+        self.pulled = False
 
     def can_overlap(self):
         """Can the agent overlap with this?"""

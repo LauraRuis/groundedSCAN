@@ -14,6 +14,9 @@ import time
 import numpy as np
 import logging
 import shutil
+import random
+
+random.seed(1)
 
 logging.getLogger("PyQt5").disabled = True
 logging.getLogger('matplotlib.font_manager').disabled = True
@@ -754,57 +757,112 @@ def test_k_shot_generalization(dataset):
     logger.info("test_k_shot_generalization PASSED in {} seconds".format(end - start))
 
 
+def test_rl_interaction(dummy_dataset):
+    for i, example in enumerate(dummy_dataset._data_pairs["train"]):
+        # Reward for doing well
+        dummy_dataset.initialize_rl_example(example)
+        steps = example["target_commands"].split(",")
+        total_reward = 0
+        for step in steps:
+            new_situation, reward = dummy_dataset.take_step(step)
+            total_reward += reward
+        assert total_reward == 1, "incorrect reward: {}".format(total_reward)
+        # No change if overgenerating
+        dummy_dataset.initialize_rl_example(example)
+        steps = example["target_commands"].split(",") + ["walk"]
+        total_reward = 0
+        for step in steps:
+            new_situation, reward = dummy_dataset.take_step(step)
+            total_reward += reward
+        assert total_reward == 1, "incorrect reward: {}".format(total_reward)
+        # Reward for doing badly
+        dummy_dataset.initialize_rl_example(example)
+        steps = ["walk"] + example["target_commands"].split(",")
+        while ",".join(steps) == example["target_commands"]:
+            random.shuffle(steps)
+        total_reward = 0
+        for step in steps:
+            new_situation, reward = dummy_dataset.take_step(step)
+            total_reward += reward
+        assert 0 <= total_reward < 1, "incorrect reward: {}".format(total_reward)
+        # Reward for doing badly
+        dummy_dataset.initialize_rl_example(example)
+        steps = example["target_commands"].split(",")[1:-1]
+        total_reward = 0
+        for step in steps:
+            new_situation, reward = dummy_dataset.take_step(step)
+            total_reward += reward
+        assert 0 <= total_reward < 1, "incorrect reward: {}".format(total_reward)
+        # Reward for taking too long badly
+        dummy_dataset.initialize_rl_example(example)
+        steps = example["target_commands"].split(",")
+        steps.insert(1, "turn left")
+        steps.insert(2, "turn right")
+        total_reward = 0
+        for step in steps:
+            new_situation, reward = dummy_dataset.take_step(step)
+            total_reward += reward
+        assert 0 <= total_reward < 1, "incorrect reward: {}".format(total_reward)
+    return
+
+
 def run_all_tests():
-    test_save_and_load_dataset(TEST_DATASET)
-    test_save_and_load_dataset(TEST_DATASET_NONCE)
-    test_save_and_load_dataset_nonce()
-    test_derivation_from_rules(TEST_DATASET)
-    test_derivation_from_rules(TEST_DATASET_NONCE)
-    test_derivation_from_string(TEST_DATASET)
-    test_derivation_from_string(TEST_DATASET_NONCE)
-    test_demonstrate_target_commands_one(TEST_DATASET)
-    test_demonstrate_target_commands_one(TEST_DATASET_NONCE)
-    test_demonstrate_target_commands_two(TEST_DATASET)
-    test_demonstrate_target_commands_two(TEST_DATASET_NONCE)
-    test_demonstrate_target_commands_three(TEST_DATASET)
-    test_demonstrate_target_commands_three(TEST_DATASET_NONCE)
-    test_demonstrate_command_one(TEST_DATASET)
-    test_demonstrate_command_one(TEST_DATASET_NONCE)
-    test_demonstrate_command_two(TEST_DATASET)
-    test_demonstrate_command_two(TEST_DATASET_NONCE)
-    test_demonstrate_command_three(TEST_DATASET)
-    test_demonstrate_command_three(TEST_DATASET_NONCE)
-    test_demonstrate_command_four(TEST_DATASET)
-    test_demonstrate_command_four(TEST_DATASET_NONCE)
-    test_demonstrate_command_five(TEST_DATASET)
-    test_demonstrate_command_five(TEST_DATASET_NONCE)
-    test_demonstrate_command_six(TEST_DATASET)
-    test_demonstrate_command_six(TEST_DATASET_NONCE)
-    test_find_referred_target_one(TEST_DATASET)
-    test_find_referred_target_one(TEST_DATASET_NONCE)
-    test_find_referred_target_two(TEST_DATASET)
-    test_find_referred_target_two(TEST_DATASET_NONCE)
-    test_generate_possible_targets_one(TEST_DATASET)
-    test_generate_possible_targets_one(TEST_DATASET_NONCE)
-    test_generate_possible_targets_two(TEST_DATASET)
-    test_generate_possible_targets_two(TEST_DATASET_NONCE)
-    test_generate_situations_one(TEST_DATASET)
-    test_generate_situations_one(TEST_DATASET_NONCE)
-    test_generate_situations_two(TEST_DATASET)
-    test_generate_situations_two(TEST_DATASET_NONCE)
-    test_generate_situations_three(TEST_DATASET)
-    test_generate_situations_three(TEST_DATASET_NONCE)
-    test_situation_representation_eq()
-    test_example_representation_eq(TEST_DATASET)
-    test_example_representation_eq(TEST_DATASET_NONCE)
-    test_example_representation(TEST_DATASET)
-    test_example_representation(TEST_DATASET_NONCE)
-    test_initialize_world(TEST_DATASET)
-    test_initialize_world(TEST_DATASET_NONCE)
-    test_image_representation_situations(TEST_DATASET)
-    test_image_representation_situations(TEST_DATASET_NONCE)
-    test_encode_situation(TEST_DATASET)
-    test_encode_situation(TEST_DATASET_NONCE)
+    # test_save_and_load_dataset(TEST_DATASET)
+    # test_save_and_load_dataset(TEST_DATASET_NONCE)
+    # test_save_and_load_dataset_nonce()
+    # test_derivation_from_rules(TEST_DATASET)
+    # test_derivation_from_rules(TEST_DATASET_NONCE)
+    # test_derivation_from_string(TEST_DATASET)
+    # test_derivation_from_string(TEST_DATASET_NONCE)
+    # test_demonstrate_target_commands_one(TEST_DATASET)
+    # test_demonstrate_target_commands_one(TEST_DATASET_NONCE)
+    # test_demonstrate_target_commands_two(TEST_DATASET)
+    # test_demonstrate_target_commands_two(TEST_DATASET_NONCE)
+    # test_demonstrate_target_commands_three(TEST_DATASET)
+    # test_demonstrate_target_commands_three(TEST_DATASET_NONCE)
+    # test_demonstrate_command_one(TEST_DATASET)
+    # test_demonstrate_command_one(TEST_DATASET_NONCE)
+    # test_demonstrate_command_two(TEST_DATASET)
+    # test_demonstrate_command_two(TEST_DATASET_NONCE)
+    # test_demonstrate_command_three(TEST_DATASET)
+    # test_demonstrate_command_three(TEST_DATASET_NONCE)
+    # test_demonstrate_command_four(TEST_DATASET)
+    # test_demonstrate_command_four(TEST_DATASET_NONCE)
+    # test_demonstrate_command_five(TEST_DATASET)
+    # test_demonstrate_command_five(TEST_DATASET_NONCE)
+    # test_demonstrate_command_six(TEST_DATASET)
+    # test_demonstrate_command_six(TEST_DATASET_NONCE)
+    # test_find_referred_target_one(TEST_DATASET)
+    # test_find_referred_target_one(TEST_DATASET_NONCE)
+    # test_find_referred_target_two(TEST_DATASET)
+    # test_find_referred_target_two(TEST_DATASET_NONCE)
+    # test_generate_possible_targets_one(TEST_DATASET)
+    # test_generate_possible_targets_one(TEST_DATASET_NONCE)
+    # test_generate_possible_targets_two(TEST_DATASET)
+    # test_generate_possible_targets_two(TEST_DATASET_NONCE)
+    # test_generate_situations_one(TEST_DATASET)
+    # test_generate_situations_one(TEST_DATASET_NONCE)
+    # test_generate_situations_two(TEST_DATASET)
+    # test_generate_situations_two(TEST_DATASET_NONCE)
+    # test_generate_situations_three(TEST_DATASET)
+    # test_generate_situations_three(TEST_DATASET_NONCE)
+    # test_situation_representation_eq()
+    # test_example_representation_eq(TEST_DATASET)
+    # test_example_representation_eq(TEST_DATASET_NONCE)
+    # test_example_representation(TEST_DATASET)
+    # test_example_representation(TEST_DATASET_NONCE)
+    # test_initialize_world(TEST_DATASET)
+    # test_initialize_world(TEST_DATASET_NONCE)
+    # test_image_representation_situations(TEST_DATASET)
+    # test_image_representation_situations(TEST_DATASET_NONCE)
+    # test_encode_situation(TEST_DATASET)
+    # test_encode_situation(TEST_DATASET_NONCE)
+    dummy_path = "data/dummy_full/dataset.txt"
+    dummy_dataset_full = GroundedScan.load_dataset_from_file(dummy_path, save_directory=TEST_DIRECTORY, k=1)
+    dummy_path = "data/dummy_zigzag/dataset.txt"
+    dummy_dataset_zigzag = GroundedScan.load_dataset_from_file(dummy_path, save_directory=TEST_DIRECTORY, k=1)
+    test_rl_interaction(dummy_dataset_full)
+    test_rl_interaction(dummy_dataset_zigzag)
     #test_k_shot_generalization(TEST_DATASET)
     #test_k_shot_generalization(TEST_DATASET_NONCE)
     shutil.rmtree(TEST_DIRECTORY)

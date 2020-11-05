@@ -254,10 +254,11 @@ class GroundedScan(object):
         situation = Situation.from_representation(data_example["situation"])
         target_commands = self.parse_command_repr(data_example["target_commands"])
         derivation = self.parse_derivation_repr(data_example["derivation"])
+        manner = data_example["manner"]
         assert self.derivation_repr(derivation) == data_example["derivation"]
         actual_target_commands, target_demonstration, action = self.demonstrate_command(derivation, situation)
         assert self.command_repr(actual_target_commands) == self.command_repr(target_commands)
-        return command, meaning, derivation, situation, actual_target_commands, target_demonstration, action
+        return command, meaning, derivation, situation, actual_target_commands, target_demonstration, action, manner
 
     @staticmethod
     def get_empty_situation():
@@ -569,7 +570,6 @@ class GroundedScan(object):
         bar_plot(self._data_statistics[split]["input_length"], "input_lengths",
                  os.path.join(self.save_directory, split + "_" + "input_lengths.png"))
 
-
     def save_dataset(self, file_name: str) -> str:
         """
         Saves the current generated data to a file in a particular format that is readable by load_examples_from_file.
@@ -615,7 +615,10 @@ class GroundedScan(object):
             for split, examples in all_data["examples"].items():
                 if split == "adverb_1":
                     num_examples = len(examples)
-                    k_random_indices = random.sample(range(0, num_examples), k=k)
+                    if num_examples:
+                        k_random_indices = random.sample(range(0, num_examples), k=k)
+                    else:
+                        k_random_indices = []
                 else:
                     k_random_indices = []
                 for i, example in enumerate(examples):
@@ -755,12 +758,19 @@ class GroundedScan(object):
         self.initialize_world(current_situation, mission=current_mission)
         return target_commands, target_demonstration, action
 
-    def initialize_world(self, situation: Situation, mission="") -> {}:
+    def initialize_world(self, situation: Situation, mission="", manner=None, verb=None, end_pos=None,
+                         required_push=0, required_pull=0, num_instructions=0) -> {}:
         """
         Initializes the world with the passed situation.
         :param situation: class describing the current situation in the world, fully determined by a grid size,
         agent position, agent direction, list of placed objects, an optional target object and optional carrying object.
-        :param mission: a string defining a command (e.g. "Walk to a green circle.")
+        :param mission: a string defining a command (e.g. "Walk to a green circle."
+        :param manner: a string defining the manner of the mission (e.g., "while spinning")
+        :param verb: a string defining the transitive verb of the mission (e.g., "push")
+        :param end_pos: position tuple of where the agent and target object should end up (e.g., (3, 4))
+        :param required_push: amount of push-actions required in a correct demonstration of this mission (e.g., 2)
+        :param required_pull: amount of pull-actions required in a correct demonstration of this mission (e.g., 0)
+        :param num_instructions: amount of actions in expert target demonstration
         """
         objects = []
         for positioned_object in situation.placed_objects:
@@ -768,7 +778,12 @@ class GroundedScan(object):
         self._world.initialize(objects, agent_position=situation.agent_pos, agent_direction=situation.agent_direction,
                                target_object=situation.target_object, carrying=situation.carrying)
         if mission:
-            self._world.set_mission(mission)
+            is_transitive = False
+            if verb in self._vocabulary.get_transitive_verbs():
+                is_transitive = True
+            self._world.set_mission(mission, manner=manner, verb=verb, is_transitive=is_transitive,
+                                    end_pos=end_pos, required_push=required_push, required_pull=required_pull,
+                                    num_instructions=num_instructions)
 
     def visualize_attention(self, input_commands: List[str], target_commands: List[str], situation: Situation,
                             attention_weights_commands: List[List[int]], attention_weights_situation: List[List[int]]):
@@ -998,13 +1013,32 @@ class GroundedScan(object):
         return save_dirs
 
     def visualize_data_example(self, data_example: dict) -> str:
-        command, meaning, derivation, situation, actual_target_commands, target_demonstration, _ = self.parse_example(
-            data_example)
+        (command, meaning, derivation, situation, actual_target_commands,
+         target_demonstration, _, _) = self.parse_example(data_example)
         mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning),
                             "\nTarget:"] + actual_target_commands)
         save_dir = self.visualize_command(situation, command, target_demonstration,
                                           mission=mission)
         return save_dir
+
+    def initialize_rl_example(self, data_example: dict) -> {}:
+        (command, meaning, derivation, situation,
+         actual_target_commands, target_demonstration, action, manner) = self.parse_example(data_example)
+        mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning),
+                            "\nTarget:"] + actual_target_commands)
+        end_position = (target_demonstration[-1].agent_pos.column, target_demonstration[-1].agent_pos.row)
+        num_instructions = len(actual_target_commands)
+        required_push = actual_target_commands.count("push")
+        required_pull = actual_target_commands.count("pull")
+        self.initialize_world(situation, mission, manner, action, end_position, required_push, required_pull,
+                              num_instructions)
+        return
+
+    def take_step(self, action_command: str,
+                  simple_situation_representation=True) -> (np.array, int):
+        new_situation, reward = self._world.take_action(action_command,
+                                                        simple_situation_representation=simple_situation_representation)
+        return new_situation, reward
 
     def visualize_data_examples(self) -> List[str]:
         if len(self._examples_to_visualize) == 0:
@@ -1344,7 +1378,7 @@ class GroundedScan(object):
     def get_data_pairs(self, max_examples=None, num_resampling=1, other_objects_sample_percentage=0.5,
                        split_type="uniform", visualize_per_template=0, visualize_per_split=0, train_percentage=0.8,
                        min_other_objects=0, k_shot_generalization=0, make_dev_set=False,
-                       cut_off_target_length=25) -> {}:
+                       cut_off_target_length=25, max_examples_per_template=-1) -> {}:
         """
         Generate a set of situations and generate all possible commands based on the current grammar and lexicon,
         match commands to situations based on relevance (if a command refers to a target object, it needs to be
@@ -1368,6 +1402,7 @@ class GroundedScan(object):
             visualized_per_template = 0
             visualized_per_split = {split: 0 for split in self._possible_splits}
             for derivation in template_derivations:
+                template_example_count = 0
                 arguments = []
                 derivation.meaning(arguments)
                 assert len(arguments) == 1, "Only one target object currently supported."
@@ -1391,6 +1426,8 @@ class GroundedScan(object):
                         idx_for_train = set(idx_for_train)
                     for i, relevant_situation in enumerate(relevant_situations):
                         visualize = False
+                        if 0 < max_examples_per_template < template_example_count:
+                            continue
                         if (example_count + 1) % 10000 == 0:
                             logger.info("Number of examples: {}".format(example_count + 1))
                         if max_examples:
@@ -1449,6 +1486,7 @@ class GroundedScan(object):
                         for split in splits:
                             self._template_identifiers[split].append(template_num)
                         example_count += 1
+                        template_example_count += 1
                         if visualize:
                             visualized_per_template += 1
                         self._world.clear_situation()
