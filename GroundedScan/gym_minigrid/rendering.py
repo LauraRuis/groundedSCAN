@@ -4,6 +4,9 @@ from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPolygon
 from PyQt5.QtCore import QPoint, QRect
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QTextEdit
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QLabel, QFrame
+import logging
+
+logging.getLogger("PyQt5").setLevel(logging.WARNING)
 
 
 class Window(QMainWindow):

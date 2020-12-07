@@ -8,6 +8,8 @@ objects, each of which is associated with a vector of features. The agent is
 evaluated on its ability to follow one or more instructions in this environment.
 Some instructions require interaction with particular kinds of objects.
 
+Now with RL mode (i.e., a reward function is added besides the supervised learning targets). To see how to train an RL agent go to [RL Mode]()
+
 ## TL;DR
 The data used in [the grounded SCAN paper](https://arxiv.org/abs/2003.05161) can be found in the folder `data` of this repository. This data can be used to train models with [the multi-modal baseline from the paper](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN). The exact match accuracies reported in the paper can then be reproduced with the mode `error_analysis` in this repository.
 
@@ -91,6 +93,38 @@ To make gifs of predictions use the mode `execute_commands`:
     --predicted_commands_file=predict.json
  
 This will visualize the predictions in `predict.json` that should be placed in the folder specified by `--output_directory` and visualize the execution in a gif in the specified output directory. **NB**: this will make one gif (including as many images as there are time-steps in that prediction) for each data point in `predict.json`. If you want to only inspect the errors, set `--only_save_errors`. The file `example_prediction.json` contains 1 data example with a prediction that can be used for trying out the error analysis and execute commands modes.
+
+### RL Mode
+To use the RL mode, generate a groundedSCAN dataset as detailed above, or use the existing ones used in the paper. There's
+also a dummy dataset at `data/dummy_full/dataset.txt` to debug an RL agent with on an easier task. This dataset only contains commands 
+of the form 'walk to the <object reference>.', and so requires no interactions or manners of walking. 
+
+Then the RL mode can be used by loading this dataset, taking examples from it to initialize the world with,
+and interacting with the world. Note that to actually do this sensibly one needs to learn a policy that
+takes observations (language commands and world states) and outputs an action. Such policy
+is not defined in this repo, but in [the model repo](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN).
+
+```python
+from GroundedScan.dataset import GroundedScan
+
+# Load the dataset.
+dataset_path = "data/dummy_full/dataset.txt"
+dataset = GroundedScan.load_dataset_from_file(dataset_path, save_directory="output", k=1)
+
+# Go over the eaxmples in the training set.
+for i, example in enumerate(dataset.get_raw_examples(split="train")):
+    
+    # Initialize the example in the dataset to obtain the initial state.
+    state = dataset.initialize_rl_example(example)
+    
+    # Take actions from some policy (NB: here undefined) to interact with the environment.
+    total_reward = 0
+    done = False
+    while not done:
+        action = policy.step(state)
+        state, reward, done = dataset.take_step(action)
+        total_reward += reward
+```
 
 ## Implementation Details
 

@@ -481,6 +481,7 @@ class World(MiniGridEnv):
         self._target_object = None
         self._observed_commands = []
         self._observed_situations = []
+        self._observed_rewards = []
         self._occupied_positions = set()
         # Hash table for looking up locations of objects based on partially formed references (e.g. find the location(s)
         # of a red cylinder when the grid has both a big red cylinder and a small red cylinder.)
@@ -579,6 +580,11 @@ class World(MiniGridEnv):
                 actual_available_positions.append((row, col))
         sampled_position = random.sample(actual_available_positions, 1).pop()
         return Position(row=sampled_position[0], column=sampled_position[1])
+
+    def distance_to_target_from(self, location: Position):
+        """Number of grid steps to take to reach the target position from the agent position."""
+        return abs(location.column - self._target_object.position.column) + \
+               abs(location.row - self._target_object.position.row)
 
     def sample_position_conditioned(self, north, east, south, west):
         """
@@ -781,15 +787,18 @@ class World(MiniGridEnv):
         else:
             return "NW", self.actions.left
 
-    def take_action(self, command_str: str, simple_situation_representation=True) -> (np.array, float):
+    def take_action(self, command_str: str, simple_situation_representation=True,
+                    progress_reward=False) -> (np.array, float, bool):
         """Execute a command and return the new state and reward (a -> s', r)."""
+        previous_agent_pos = self.agent_pos[0], self.agent_pos[1]
         self.execute_command(command_str)
         if simple_situation_representation:
             new_situation = self.get_current_situation_grid_repr()
         else:
             new_situation = self.get_current_situation_image()
-        reward = self.calculate_reward()
-        return new_situation, reward
+        reward, done = self.calculate_reward(previous_agent_pos=previous_agent_pos, progress_reward=progress_reward)
+        self._observed_rewards.append(reward)
+        return new_situation, reward, done
 
     def check_manner(self, after=False):
         if self.manner == "cautiously":
@@ -847,8 +856,28 @@ class World(MiniGridEnv):
         num_actions_expert = self.num_expert_instructions
         return num_actions_expert / max(num_actions_agent, num_actions_expert)
 
-    def calculate_reward(self) -> float:
+    def calculate_reward(self, previous_agent_pos: Tuple[int, int], progress_reward=False) -> Tuple[float, bool]:
+        """Calculate the reward for the current state.
+
+        The agent can get the following rewards:
+        - A reward of 1 if it executes the command perfectly, meaning goes to the correct object, interacts with
+          it in the correct way if applicable, and has the right manner of moving across the grid if applicable.
+        - The reward gets decreased linearly if the agent has taken longer than needed to execute a command,
+          where longer than needed is longer than the supervised target action sequence.
+        - if progress_reward is set to True, the agent gets a small reward if it takes a step closer to the target.
+        - See the GitHub for explanations on what it means to execute a manner correctly
+        """
         reward = 0
+        done = False
+
+        if progress_reward:
+            previous_distance_to_target = self.distance_to_target_from(Position(column=previous_agent_pos[0],
+                                                                                row=previous_agent_pos[1]))
+            current_distance_to_target = self.distance_to_target_from(Position(column=self.agent_pos[0],
+                                                                               row=self.agent_pos[1]))
+            extra_reward = 0.5 / self.grid_size
+            if current_distance_to_target < previous_distance_to_target:
+                reward += extra_reward
 
         # if target object and agent in right place add reward
         if tuple(self.agent_pos) == self.end_pos \
@@ -864,12 +893,14 @@ class World(MiniGridEnv):
 
             # If no manner, agent is done.
             if not self.manner:
+                done = True
                 reward += 1
             # Otherwise, check if manner is executed correctly yet.
             else:
                 passed_adverb_check = self.check_manner()
                 if passed_adverb_check:
                     self.finished_adverb = True
+                    done = True
                     reward += 1
 
         # If agent and object in correct location but manner sequence not correct yet, check sequence again.
@@ -877,9 +908,15 @@ class World(MiniGridEnv):
             passed_adverb_check = self.check_manner()
             if passed_adverb_check:
                 self.finished_adverb = True
+                done = True
                 reward += 1
 
-        return max(0, reward * self.path_length_penalty())
+        if not self.manner and self.finished:
+            done = True
+        elif self.manner and self.finished and self.finished_adverb:
+            done = True
+
+        return max(0., reward * self.path_length_penalty()), done
 
     def execute_command(self, command_str: str):
         command_list = command_str.split()
@@ -1114,11 +1151,15 @@ class World(MiniGridEnv):
     def get_current_observations(self):
         return self._observed_commands.copy(), self._observed_situations.copy()
 
+    def get_current_rewards(self):
+        return self._observed_rewards.copy()
+
     def clear_situation(self):
         self._object_lookup_table.clear()
         self._placed_object_list.clear()
         self._observed_commands.clear()
         self._observed_situations.clear()
+        self._observed_rewards.clear()
         self._occupied_positions.clear()
         self.previous_pos.clear()
         self.not_zigzagged = 0
