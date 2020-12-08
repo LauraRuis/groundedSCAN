@@ -8,6 +8,8 @@ objects, each of which is associated with a vector of features. The agent is
 evaluated on its ability to follow one or more instructions in this environment.
 Some instructions require interaction with particular kinds of objects.
 
+**NB**: for **reinforcement learning mode** see branch `rlmode`. Please note that the full reward function including interactions and manners has not been tested with a learned policy yet.
+
 ## TL;DR
 The data used in [the grounded SCAN paper](https://arxiv.org/abs/2003.05161) can be found in the folder `data` of this repository. This data can be used to train models with [the multi-modal baseline from the paper](https://github.com/LauraRuis/multimodal_seq2seq_gSCAN). The exact match accuracies reported in the paper can then be reproduced with the mode `error_analysis` in this repository.
 
