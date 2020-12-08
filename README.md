@@ -21,7 +21,6 @@ Some data examples (more at bottom of this file, and a demo dataset can be found
 ## Leaderboard
 This section contains the leaderboard for scores obtained by papers on gSCAN. 
 
-<sub>
 |                             | Baseline      | GECA | [1]         |  [2]         |  [3]         |
 |-----------------------------|---------------|------|--------------|--------------|--------------|
 | A: Random       | 97.69 +\- 0.22  | 87.6 +\- 1.19  | 97.32   | 94.19 +\- 0.71     | **98.6 +\- 0.95**     |
@@ -36,7 +35,7 @@ This section contains the leaderboard for scores obtained by papers on gSCAN.
 | G: Adverb k=50       | 4.63 +\- 2.08  | -  | **40.78**   | -     | -     |
 | H: Adverb to Verb       | 22.70 +\- 4.59  | 11.83 +\- 0.31  | 21.95   | -     | **33.6 +\- 20.81**     |
 | I: Length       | **2.10 +\- 0.05**  | -  |  -  | -     | -     |
-</sub>
+
 
 [1] Yen-Ling Kuo, Boris Katz, and Andrei Barbu. 2020. ["Compositional networks enable systematic generalization for grounded language understanding."](https://arxiv.org/pdf/2008.02742.pdf)
 
