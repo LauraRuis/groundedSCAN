@@ -19,7 +19,7 @@ Some data examples (more at bottom of this file, and a demo dataset can be found
 ![while zigzagging](https://raw.githubusercontent.com/LauraRuis/groundedSCAN/master/documentation/examples_per_adverb/While%20zigzagging/movie.gif?token=AGNMPFGUYKKOMTFIOLMQ42K6N7N7K)
 
 ## Leaderboard
-This section contains the leaderboard for scores obtained by papers on gSCAN. 
+This section contains the leaderboard for scores obtained by papers on gSCAN. To add scores please consider a pull request. 
 
 |                             | Baseline      | GECA | [1]         |  [2]         |  [3]         |
 |-----------------------------|---------------|------|--------------|--------------|--------------|
