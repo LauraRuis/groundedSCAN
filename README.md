@@ -21,20 +21,22 @@ Some data examples (more at bottom of this file, and a demo dataset can be found
 ## Leaderboard
 This section contains the leaderboard for scores obtained by papers on gSCAN. 
 
-|                             | Baseline      | GECA |Kuo et al. [1]         | Heinze-Deml and Bouchacourt [2]         | Gao et al. [3]         |
+<sub>
+|                             | Baseline      | GECA | [1]         |  [2]         |  [3]         |
 |-----------------------------|---------------|------|--------------|--------------|--------------|
-| A: Random       | 97.69 +\- 0.22  | 87.6 +\- 1.19  | 97.32   | 94.19 +\- 0.71     | 98.6 +\- 0.95     |
-| B: Yellow Squares       | 54.96 +\- 39.39  | 34.92 +\- 39.30  | 95.35   | 87.31 +\- 4.38     | 99.08 +\- 0.69     |
-| C: Red Squares       | 23.51 +\- 21.82  | 78.77 +\- 6.63  | 80.16   | 81.07 +\- 10.12     | 80.31 +\- 24.51     |
-| D: Novel Direction       | 0.00 +\- 0.00  | 0.00 +\- 0.00  | 5.73   | -     | 0.16 +\- 0.12     |
-| E: Relativity       | 35.02 +\- 2.35  | 33.19 +\- 3.69  | 75.19   | 52.8 +\- 9.96     | 87.32 +\- 27.38     |
-| F: Class Inference       | 92.52 +\- 6.75  | 85.99 +\- 0.85  | 98.63   | -     | 99.33 +\- 0.46     |
-| G: Adverb k=1       | 0.00 +\- 0.00  | 0.00 +\- 0.00  | 11.94   | -     | -     |
-| G: Adverb k=5       | 0.47 +\- 0.14  | -  | 10.31   | -     | -     |
-| G: Adverb k=10       | 2.04 +\- 0.95  | -  | 33.28   | -     | -     |
-| G: Adverb k=50       | 4.63 +\- 2.08  | -  | 40.78   | -     | -     |
-| H: Adverb to Verb       | 22.70 +\- 4.59  | 11.83 +\- 0.31  | 21.95   | -     | 33.6 +\- 20.81     |
-| I: Length       | 2.10 +\- 0.05  | -  |  -  | -     | -     |
+| A: Random       | 97.69 +\- 0.22  | 87.6 +\- 1.19  | 97.32   | 94.19 +\- 0.71     | **98.6 +\- 0.95**     |
+| B: Yellow Squares       | 54.96 +\- 39.39  | 34.92 +\- 39.30  | 95.35   | 87.31 +\- 4.38     | **99.08 +\- 0.69**     |
+| C: Red Squares       | 23.51 +\- 21.82  | 78.77 +\- 6.63  | 80.16   | **81.07 +\- 10.12**     | 80.31 +\- 24.51     |
+| D: Novel Direction       | 0.00 +\- 0.00  | 0.00 +\- 0.00  | **5.73**   | -     | 0.16 +\- 0.12     |
+| E: Relativity       | 35.02 +\- 2.35  | 33.19 +\- 3.69  | 75.19   | 52.8 +\- 9.96     | **87.32 +\- 27.38**     |
+| F: Class Inference       | 92.52 +\- 6.75  | 85.99 +\- 0.85  | 98.63   | -     | **99.33 +\- 0.46**     |
+| G: Adverb k=1       | 0.00 +\- 0.00  | 0.00 +\- 0.00  | **11.94**   | -     | -     |
+| G: Adverb k=5       | 0.47 +\- 0.14  | -  | **10.31**   | -     | -     |
+| G: Adverb k=10       | 2.04 +\- 0.95  | -  | **33.28**   | -     | -     |
+| G: Adverb k=50       | 4.63 +\- 2.08  | -  | **40.78**   | -     | -     |
+| H: Adverb to Verb       | 22.70 +\- 4.59  | 11.83 +\- 0.31  | 21.95   | -     | **33.6 +\- 20.81**     |
+| I: Length       | **2.10 +\- 0.05**  | -  |  -  | -     | -     |
+</sub>
 
 [1] Yen-Ling Kuo, Boris Katz, and Andrei Barbu. 2020. ["Compositional networks enable systematic generalization for grounded language understanding."](https://arxiv.org/pdf/2008.02742.pdf)
 
