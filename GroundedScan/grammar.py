@@ -365,12 +365,16 @@ class Grammar(object):
         self.rules = {nonterminal: [] for nonterminal in nonterminals}
         self.nonterminals = {nt.name: nt for nt in nonterminals}
         self.terminals = {}
+        self.rhs_dictionary = {nt: [] for nt in nonterminals}
 
         self.vocabulary = vocabulary
         self.rule_str_to_rules = {}
         for rule in self.rule_list:
             self.rules[rule.lhs].append(rule)
             self.rule_str_to_rules[str(rule)] = rule
+            for rhs_symbol in rule.rhs:
+                if isinstance(rhs_symbol, Nonterminal):
+                    self.rhs_dictionary[rhs_symbol].append(rule)
         self.expandables = set(rule.lhs for rule in self.rule_list if not isinstance(rule, LexicalRule))
         self.categories = {
             "manner": set(vocabulary.get_adverbs()),
@@ -463,6 +467,54 @@ class Grammar(object):
             meta={"recursion": recursion}
         )
 
+    def sample_constrained(self, lexical_rule: str) -> Derivation:
+        """Sample a derivation with a specified lexical rule, e.g. lexical_rule='RB -> cautiously'."""
+        assert lexical_rule in self.rule_str_to_rules, \
+            "Unknown lexical_rule specified: {}. \nOptions: {}".format(lexical_rule,
+                                                                       list(self.rule_str_to_rules.keys()))
+
+        # Start the list of rules with the constrained lexical rule.
+        lexical_rule = self.rule_str_to_rules[lexical_rule]
+        current_nonterminal = lexical_rule.lhs
+        list_derivation = [lexical_rule]
+
+        # Keep track of which NT's in the sampled RHS's of the rules aren't expanded yet.
+        to_expand = []
+        to_expand_indices = []
+        rule_count = 0
+        previous_rule = None
+
+        # Go to the left from rule and sample a new rule that contains this in the RHS until ROOT is reached.
+        while current_nonterminal != Nonterminal(name="ROOT"):
+            # Find current lhs in a rhs rule.
+            potential_rules = self.rhs_dictionary[current_nonterminal]
+            chosen_rule = potential_rules[np.random.randint(len(potential_rules))]
+            if chosen_rule == previous_rule:  # No recursion allowed.
+                continue
+            previous_rule = chosen_rule
+            list_derivation.append(chosen_rule)
+            nts_to_expand = [nt for nt in chosen_rule.rhs if nt != current_nonterminal]
+            if len(nts_to_expand):
+                to_expand_indices.append(rule_count)
+                to_expand.append(nts_to_expand)
+            rule_count += 1
+            current_nonterminal = chosen_rule.lhs
+
+        # Make a constituncy tree of the sampled rules while expanding the NT's that need to be expanded.
+        current_children = list_derivation[0].rhs
+        current_rule = list_derivation[0]
+        current_derivation = Derivation(current_rule, children=current_children)
+        for i, next_rule in enumerate(list_derivation[1:]):
+            next_children = []
+            if i in to_expand_indices:
+                nts_to_expand = to_expand.pop(0)
+                for nt_to_expand in nts_to_expand:
+                    next_children.append(self.sample(symbol=nt_to_expand, last_rule=next_rule))
+            next_children.append(current_derivation)
+            next_derivation = Derivation(next_rule, children=next_children)
+            current_derivation = next_derivation
+        return current_derivation
+
     def generate_all(self, current_template: Template, all_templates: list, rule_use_counter: dict):
 
         # If the template contains no non-terminals, we close this branch.
@@ -554,13 +606,20 @@ class Grammar(object):
             all_derivations.append(derivation)
         return all_derivations
 
-    def generate_all_commands(self):
+    def generate_all_commands(self, with_nonterminal=None):
 
         # Generate all possible templates from the grammar.
         initial_template = Template()
         initial_template.add_value(value=ROOT, expandable=True)
         self.generate_all(current_template=initial_template, all_templates=self.all_templates,
                           rule_use_counter={})
+        if with_nonterminal:
+            assert with_nonterminal in self.nonterminals, "Wrong nonterminal specified in generate_all_commands"
+            keep_templates = []
+            for i, template in enumerate(self.all_templates):
+                if self.nonterminals[with_nonterminal] in template[0]:
+                    keep_templates.append(template)
+            self.all_templates = keep_templates
 
         # For each template, form all possible commands by combining it with the lexicon.
         for i, (derivation_template, derivation_rules) in enumerate(self.all_templates):

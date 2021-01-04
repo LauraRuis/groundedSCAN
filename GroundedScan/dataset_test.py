@@ -628,6 +628,48 @@ def test_initialize_world(dataset):
     logger.info("test_initialize_world PASSED in {} seconds".format(end - start))
 
 
+def test_generate_manners():
+    intransitive_verbs = ["walk"]
+    transitive_verbs = ["push", "pull"]
+    adverbs = ["manner1", "manner2", "manner3",
+               "cautiously", "while spinning", "while zigzagging", "hesitantly"]
+    nouns = ["circle", "cylinder", "square"]
+    color_adjectives = ["red", "blue", "green", "yellow"]
+    size_adjectives = ["big", "small"]
+    situation = Situation(grid_size=6, agent_position=Position(row=1, column=2), agent_direction=INT_TO_DIR[0],
+                          target_object=PositionedObject(object=Object(size=2, color='red', shape='circle'),
+                                                         position=Position(row=4, column=2),
+                                                         vector=np.array([1, 0, 1])),
+                          placed_objects=[PositionedObject(object=Object(size=2, color='red', shape='circle'),
+                                                           position=Position(row=4, column=2),
+                                                           vector=np.array([1, 0, 1])),
+                                          PositionedObject(object=Object(size=4, color='green', shape='circle'),
+                                                           position=Position(row=5, column=5),
+                                                           vector=np.array([0, 1, 0]))], carrying=None)
+    dataset = GroundedScan(intransitive_verbs=intransitive_verbs,
+                           transitive_verbs=transitive_verbs,
+                           adverbs=adverbs, nouns=nouns,
+                           color_adjectives=color_adjectives,
+                           size_adjectives=size_adjectives, percentage_train=0.8,
+                           min_object_size=1, max_object_size=4, sample_vocabulary='default',
+                           save_directory=TEST_DIRECTORY, grid_size=6, type_grammar="adverb")
+    generated_manners = dataset._world.left_over_manners.keys()
+    assert len(generated_manners) == 3, "test_generate_manners() FAILED."
+    for extra_manner in adverbs[:3]:
+        deriv = dataset._grammar.sample_constrained(lexical_rule="RB -> {}".format(extra_manner))
+        target_commands_1, target_demonstration_1, action_1 = dataset.demonstrate_command(
+            deriv, initial_situation=situation)
+        command = deriv.words()
+        meaning = command
+        manner = dataset._world.left_over_manners[extra_manner]
+        mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning), "\nManner: ",
+                            ' '.join(manner),
+                            "\nTarget:"] + target_commands_1)
+        save_dir = dataset.visualize_command(situation, command, target_demonstration_1,
+                                             mission=mission)
+    return
+
+
 def test_image_representation_situations(dataset):
     """Test that situations are still the same when they need to be in image / numpy RGB array form."""
     start = time.time()
@@ -755,56 +797,57 @@ def test_k_shot_generalization(dataset):
 
 
 def run_all_tests():
-    test_save_and_load_dataset(TEST_DATASET)
-    test_save_and_load_dataset(TEST_DATASET_NONCE)
-    test_save_and_load_dataset_nonce()
-    test_derivation_from_rules(TEST_DATASET)
-    test_derivation_from_rules(TEST_DATASET_NONCE)
-    test_derivation_from_string(TEST_DATASET)
-    test_derivation_from_string(TEST_DATASET_NONCE)
-    test_demonstrate_target_commands_one(TEST_DATASET)
-    test_demonstrate_target_commands_one(TEST_DATASET_NONCE)
-    test_demonstrate_target_commands_two(TEST_DATASET)
-    test_demonstrate_target_commands_two(TEST_DATASET_NONCE)
-    test_demonstrate_target_commands_three(TEST_DATASET)
-    test_demonstrate_target_commands_three(TEST_DATASET_NONCE)
-    test_demonstrate_command_one(TEST_DATASET)
-    test_demonstrate_command_one(TEST_DATASET_NONCE)
-    test_demonstrate_command_two(TEST_DATASET)
-    test_demonstrate_command_two(TEST_DATASET_NONCE)
-    test_demonstrate_command_three(TEST_DATASET)
-    test_demonstrate_command_three(TEST_DATASET_NONCE)
-    test_demonstrate_command_four(TEST_DATASET)
-    test_demonstrate_command_four(TEST_DATASET_NONCE)
-    test_demonstrate_command_five(TEST_DATASET)
-    test_demonstrate_command_five(TEST_DATASET_NONCE)
-    test_demonstrate_command_six(TEST_DATASET)
-    test_demonstrate_command_six(TEST_DATASET_NONCE)
-    test_find_referred_target_one(TEST_DATASET)
-    test_find_referred_target_one(TEST_DATASET_NONCE)
-    test_find_referred_target_two(TEST_DATASET)
-    test_find_referred_target_two(TEST_DATASET_NONCE)
-    test_generate_possible_targets_one(TEST_DATASET)
-    test_generate_possible_targets_one(TEST_DATASET_NONCE)
-    test_generate_possible_targets_two(TEST_DATASET)
-    test_generate_possible_targets_two(TEST_DATASET_NONCE)
-    test_generate_situations_one(TEST_DATASET)
-    test_generate_situations_one(TEST_DATASET_NONCE)
-    test_generate_situations_two(TEST_DATASET)
-    test_generate_situations_two(TEST_DATASET_NONCE)
-    test_generate_situations_three(TEST_DATASET)
-    test_generate_situations_three(TEST_DATASET_NONCE)
-    test_situation_representation_eq()
-    test_example_representation_eq(TEST_DATASET)
-    test_example_representation_eq(TEST_DATASET_NONCE)
-    test_example_representation(TEST_DATASET)
-    test_example_representation(TEST_DATASET_NONCE)
-    test_initialize_world(TEST_DATASET)
-    test_initialize_world(TEST_DATASET_NONCE)
-    test_image_representation_situations(TEST_DATASET)
-    test_image_representation_situations(TEST_DATASET_NONCE)
-    test_encode_situation(TEST_DATASET)
-    test_encode_situation(TEST_DATASET_NONCE)
+    # test_save_and_load_dataset(TEST_DATASET)
+    # test_save_and_load_dataset(TEST_DATASET_NONCE)
+    # test_save_and_load_dataset_nonce()
+    # test_derivation_from_rules(TEST_DATASET)
+    # test_derivation_from_rules(TEST_DATASET_NONCE)
+    # test_derivation_from_string(TEST_DATASET)
+    # test_derivation_from_string(TEST_DATASET_NONCE)
+    # test_demonstrate_target_commands_one(TEST_DATASET)
+    # test_demonstrate_target_commands_one(TEST_DATASET_NONCE)
+    # test_demonstrate_target_commands_two(TEST_DATASET)
+    # test_demonstrate_target_commands_two(TEST_DATASET_NONCE)
+    # test_demonstrate_target_commands_three(TEST_DATASET)
+    # test_demonstrate_target_commands_three(TEST_DATASET_NONCE)
+    # test_demonstrate_command_one(TEST_DATASET)
+    # test_demonstrate_command_one(TEST_DATASET_NONCE)
+    # test_demonstrate_command_two(TEST_DATASET)
+    # test_demonstrate_command_two(TEST_DATASET_NONCE)
+    # test_demonstrate_command_three(TEST_DATASET)
+    # test_demonstrate_command_three(TEST_DATASET_NONCE)
+    # test_demonstrate_command_four(TEST_DATASET)
+    # test_demonstrate_command_four(TEST_DATASET_NONCE)
+    # test_demonstrate_command_five(TEST_DATASET)
+    # test_demonstrate_command_five(TEST_DATASET_NONCE)
+    # test_demonstrate_command_six(TEST_DATASET)
+    # test_demonstrate_command_six(TEST_DATASET_NONCE)
+    # test_find_referred_target_one(TEST_DATASET)
+    # test_find_referred_target_one(TEST_DATASET_NONCE)
+    # test_find_referred_target_two(TEST_DATASET)
+    # test_find_referred_target_two(TEST_DATASET_NONCE)
+    # test_generate_possible_targets_one(TEST_DATASET)
+    # test_generate_possible_targets_one(TEST_DATASET_NONCE)
+    # test_generate_possible_targets_two(TEST_DATASET)
+    # test_generate_possible_targets_two(TEST_DATASET_NONCE)
+    # test_generate_situations_one(TEST_DATASET)
+    # test_generate_situations_one(TEST_DATASET_NONCE)
+    # test_generate_situations_two(TEST_DATASET)
+    # test_generate_situations_two(TEST_DATASET_NONCE)
+    # test_generate_situations_three(TEST_DATASET)
+    # test_generate_situations_three(TEST_DATASET_NONCE)
+    # test_situation_representation_eq()
+    # test_example_representation_eq(TEST_DATASET)
+    # test_example_representation_eq(TEST_DATASET_NONCE)
+    # test_example_representation(TEST_DATASET)
+    # test_example_representation(TEST_DATASET_NONCE)
+    # test_initialize_world(TEST_DATASET)
+    # test_initialize_world(TEST_DATASET_NONCE)
+    # test_image_representation_situations(TEST_DATASET)
+    # test_image_representation_situations(TEST_DATASET_NONCE)
+    # test_encode_situation(TEST_DATASET)
+    # test_encode_situation(TEST_DATASET_NONCE)
     #test_k_shot_generalization(TEST_DATASET)
     #test_k_shot_generalization(TEST_DATASET_NONCE)
-    shutil.rmtree(TEST_DIRECTORY)
+    test_generate_manners()
+    # shutil.rmtree(TEST_DIRECTORY)

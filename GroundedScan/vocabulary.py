@@ -9,7 +9,7 @@ class Vocabulary(object):
     """
     INTRANSITIVE_VERBS = {"walk"}
     TRANSITIVE_VERBS = {"push", "pull"}
-    ADVERBS = {"quickly", "slowly", "while zigzagging", "while spinning", "cautiously", "hesitantly"}
+    ADVERBS = {"while zigzagging", "while spinning", "cautiously", "hesitantly"}
     NOUNS = {"circle", "square", "cylinder"}
     COLOR_ADJECTIVES = {"green", "red", "blue", "yellow"}
     SIZE_ADJECTIVES = {"small", "big"}
@@ -65,6 +65,9 @@ class Vocabulary(object):
     def get_semantic_colors(self):
         return list(self._color_adjectives.values()).copy()
 
+    def get_semantic_manners(self):
+        return list(self._adverbs.values()).copy()
+
     def translate_word(self, word: str) -> str:
         if word in self._translation_table:
             return self._translation_table[word]
@@ -82,17 +85,29 @@ class Vocabulary(object):
         return len(self._nouns) * len(self._color_adjectives)
 
     @staticmethod
-    def bind_words_to_meanings(available_words: List[str], available_semantic_meanings: Set[str]) -> Dict[str, str]:
-        assert len(available_words) <= len(available_semantic_meanings), "Too many words specified for available"\
-                                                                         "semantic meanings: {}".format(
-            available_semantic_meanings)
+    def bind_words_to_meanings(available_words: List[str], available_semantic_meanings: Set[str],
+                               check_size=True, word_class=None) -> Dict[str, str]:
+        if check_size:
+            assert len(available_words) <= len(available_semantic_meanings), "Too many words specified for available"\
+                                                                             "semantic meanings: {}".format(
+                available_semantic_meanings)
+        if not check_size:
+            assert word_class, "Need to pass word_class if want to use extra semantic meanings not pre-defined."
         translation_table = {}
+        words_left = []
         for word in available_words:
             if word in available_semantic_meanings:
                 translation_table[word] = word
                 available_semantic_meanings.remove(word)
             else:
-                translation_table[word] = available_semantic_meanings.pop()
+                words_left.append(word)
+        no_meaning_counter = 0
+        for word_left in words_left:
+            if len(available_semantic_meanings):
+                translation_table[word_left] = available_semantic_meanings.pop()
+            else:
+                translation_table[word_left] = word_left
+                no_meaning_counter += 1
         return translation_table
 
     @classmethod
@@ -103,7 +118,7 @@ class Vocabulary(object):
         nouns = cls.bind_words_to_meanings(nouns, cls.NOUNS.copy())
         color_adjectives = cls.bind_words_to_meanings(color_adjectives, cls.COLOR_ADJECTIVES.copy())
         size_adjectives = cls.bind_words_to_meanings(size_adjectives, cls.SIZE_ADJECTIVES.copy())
-        adverbs = cls.bind_words_to_meanings(adverbs, cls.ADVERBS.copy())
+        adverbs = cls.bind_words_to_meanings(adverbs, cls.ADVERBS.copy(), check_size=False, word_class="adverb")
         return cls(intransitive_verbs, transitive_verbs, adverbs, nouns, color_adjectives, size_adjectives)
 
     @classmethod

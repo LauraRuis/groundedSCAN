@@ -444,13 +444,27 @@ class World(MiniGridEnv):
 
     AVAILABLE_SHAPES = {"circle", "square", "cylinder"}
     AVAILABLE_COLORS = {"red", "blue", "green", "yellow"}
+    AVAILABLE_MANNERS = {"cautiously", "hesitantly", "while spinning", "while zigzagging"}
 
-    def __init__(self, grid_size: int, shapes: List[str], colors: List[str], object_vocabulary: ObjectVocabulary,
+    def __init__(self, grid_size: int, shapes: List[str], colors: List[str], manners: List[str],
+                 object_vocabulary: ObjectVocabulary,
                  save_directory: str):
         # Some checks on the input
         for shape, color in zip(shapes, colors):
             assert shape in self.AVAILABLE_SHAPES, "Specified shape {} not implemented in minigrid env.".format(shape)
             assert color in self.AVAILABLE_COLORS, "Specified color {}, not implemented in minigrid env.".format(color)
+
+        # See whether the semantic manners in the vocabulary are more than the available manners
+        self.min_manner_length = 2
+        self.max_manner_length = 5
+        if not set(manners).issubset(self.AVAILABLE_MANNERS):
+            set_manners = set(manners)
+            assert self.AVAILABLE_MANNERS.issubset(set_manners), "Diff semantic manners passed to World than available."
+            left_over_manners = set_manners - self.AVAILABLE_MANNERS
+            self.left_over_manners = {manner: [] for manner in left_over_manners}
+            self._gen_manners()
+        else:
+            self.left_over_manners = {}
 
         # Define the grid world.
         self.grid_size = grid_size
@@ -476,6 +490,13 @@ class World(MiniGridEnv):
         self._object_lookup_table = {}
         self.save_directory = save_directory
         super().__init__(grid_size=grid_size, max_steps=4 * grid_size * grid_size)
+
+    def _gen_manners(self):
+        non_moving_actions = ["turn left", "turn right", "stay"]
+        for manner, sequence in self.left_over_manners.items():
+            num_actions = random.randint(self.min_manner_length, self.max_manner_length)
+            sequence.extend(random.choices(non_moving_actions, k=num_actions))
+        return
 
     def _gen_grid(self, width, height):
         # Create an empty grid
@@ -718,6 +739,15 @@ class World(MiniGridEnv):
                 self._observed_commands.append(primitive_command)
                 self._observed_situations.append(self.get_current_situation())
 
+    def do_generated_manner(self, manner):
+        original_direction = INT_TO_DIR[self.agent_dir]
+        action_sequence = self.left_over_manners[manner]
+        for action in action_sequence:
+            self.execute_command(action)
+
+        # Turn back to original direction
+        self.turn_to_direction(original_direction)
+
     def move_object_to_wall(self, action: str, manner: str):
         if action == "push":
             direction = INT_TO_DIR[self.agent_dir]
@@ -728,6 +758,8 @@ class World(MiniGridEnv):
                 self.spin()
             elif manner == "cautiously":
                 self.look_left_and_right()
+            elif manner in self.left_over_manners:
+                self.do_generated_manner(manner)
             self.push_or_pull_object(direction=direction, primitive_command=action)
             if manner == "hesitantly":
                 self.hesitate()
@@ -778,6 +810,7 @@ class World(MiniGridEnv):
             self.push_or_pull_object(direction=DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]],
                                      primitive_command=verb)
         elif verb == "stay":
+            self.hesitate()
             return
         else:
             raise ValueError("Incorrect command {}.".format(command_str))
@@ -813,6 +846,9 @@ class World(MiniGridEnv):
         elif manner == "cautiously":
             self.turn_to_direction(direction=direction)
             self.look_left_and_right()
+            self.take_step_in_direction(direction=direction, primitive_command=primitive_command)
+        elif manner in self.left_over_manners:
+            self.do_generated_manner(manner)
             self.take_step_in_direction(direction=direction, primitive_command=primitive_command)
         else:
             self.take_step_in_direction(direction=direction, primitive_command=primitive_command)

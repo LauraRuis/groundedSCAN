@@ -76,6 +76,7 @@ class GroundedScan(object):
         self._world = World(grid_size=grid_size, colors=self._vocabulary.get_semantic_colors(),
                             object_vocabulary=self._object_vocabulary,
                             shapes=self._vocabulary.get_semantic_shapes(),
+                            manners=self._vocabulary.get_semantic_manners(),
                             save_directory=self.save_directory)
         self._relative_directions = {"n", "e", "s", "w", "ne", "se", "sw", "nw"}
         self._straight_directions = {"n", "e", "s", "w"}
@@ -633,8 +634,8 @@ class GroundedScan(object):
                             # dataset.update_data_statistics(example, "dev")
             return dataset
 
-    def generate_all_commands(self) -> {}:
-        self._grammar.generate_all_commands()
+    def generate_all_commands(self, with_nonterminal=None) -> {}:
+        self._grammar.generate_all_commands(with_nonterminal=with_nonterminal)
 
     def sample_command(self) -> Tuple[Derivation, list]:
         coherent = False
@@ -1000,7 +1001,12 @@ class GroundedScan(object):
     def visualize_data_example(self, data_example: dict) -> str:
         command, meaning, derivation, situation, actual_target_commands, target_demonstration, _ = self.parse_example(
             data_example)
-        mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning),
+        manner_sequence = []
+        for manner in self._vocabulary.get_semantic_manners():
+            if manner in command:
+                manner_sequence.extend(self._world.left_over_manners[manner])
+        mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning), "\nManner: ",
+                            ' '.join(manner_sequence),
                             "\nTarget:"] + actual_target_commands)
         save_dir = self.visualize_command(situation, command, target_demonstration,
                                           mission=mission)
@@ -1344,7 +1350,7 @@ class GroundedScan(object):
     def get_data_pairs(self, max_examples=None, num_resampling=1, other_objects_sample_percentage=0.5,
                        split_type="uniform", visualize_per_template=0, visualize_per_split=0, train_percentage=0.8,
                        min_other_objects=0, k_shot_generalization=0, make_dev_set=False,
-                       cut_off_target_length=25) -> {}:
+                       cut_off_target_length=25, with_nonterminal=None) -> {}:
         """
         Generate a set of situations and generate all possible commands based on the current grammar and lexicon,
         match commands to situations based on relevance (if a command refers to a target object, it needs to be
@@ -1361,7 +1367,7 @@ class GroundedScan(object):
 
         # Generate all situations and commands.
         situation_specifications = self.generate_situations(num_resampling=num_resampling)
-        self.generate_all_commands()
+        self.generate_all_commands(with_nonterminal=with_nonterminal)
         example_count = 0
         dropped_examples = 0
         for template_num, template_derivations in self._grammar.all_derivations.items():
@@ -1409,11 +1415,13 @@ class GroundedScan(object):
                         assert situation.distance_to_target == relevant_situation["distance_to_target"]
                         target_commands, target_situations, target_action = self.demonstrate_command(
                             derivation, initial_situation=situation)
-                        if i == idx_to_visualize:
-                            visualize = True
+                        # if i == idx_to_visualize:
+                        #     visualize = True
                         if visualized_per_template >= visualize_per_template:
                             visualize = False
-                        if adverb and visualized_per_template <= visualize_per_template:
+                        # if adverb and visualized_per_template <= visualize_per_template:
+                        #     visualize = True
+                        if "manner1" in derivation.words() or "manner2" in derivation.words() or "manner3" in derivation.words() and visualized_per_template <= visualize_per_template:
                             visualize = True
                         if split_type == "uniform":
                             if i in idx_for_train:
