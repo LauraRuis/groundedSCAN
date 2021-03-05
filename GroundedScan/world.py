@@ -972,6 +972,8 @@ class World(MiniGridEnv):
             self.step(action=self.actions.forward)
             self._observed_commands.append(primitive_command)
             self._observed_situations.append(self.get_current_situation())
+        else:
+            raise ValueError("Trying to step outside of grid.")
 
     def save_situation(self, file_name, attention_weights=[]) -> str:
         save_location = os.path.join(self.save_directory, file_name)

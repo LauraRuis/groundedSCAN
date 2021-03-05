@@ -18,7 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description="Grounded SCAN")
 
     # General arguments.
-    parser.add_argument('--mode', type=str, default='execute_commands',
+    parser.add_argument('--mode', type=str, default='test',
                         help='Generate (mode=generate) data, run tests (mode=test), analyse the end positions of'
                              ' predictions compared to ground truth end positions (mode=position_analysis) '
                              ' or execute commands from a file (mode=execute_commands).')

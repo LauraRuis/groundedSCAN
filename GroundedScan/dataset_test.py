@@ -8,12 +8,13 @@ from GroundedScan.world import INT_TO_DIR
 from GroundedScan.world import PositionedObject
 from GroundedScan.helpers import numpy_array_to_image
 from GroundedScan.helpers import image_to_numpy_array
+import GroundedScan.dsl as dsl
 
 import os
 import time
 import numpy as np
 import logging
-import shutil
+import random
 
 logging.getLogger("PyQt5").disabled = True
 logging.getLogger('matplotlib.font_manager').disabled = True
@@ -28,7 +29,7 @@ EXAMPLES_TO_TEST = 10000
 
 intransitive_verbs = ["walk"]
 transitive_verbs = ["push", "pull"]
-adverbs = ["cautiously"]
+adverbs = ["cautiously", "while spinning", "hesitantly", "while zigzagging"]
 nouns = ["circle", "cylinder", "square"]
 color_adjectives = ["red", "blue", "green", "yellow"]
 size_adjectives = ["big", "small"]
@@ -40,6 +41,15 @@ TEST_DATASET = GroundedScan(intransitive_verbs=intransitive_verbs,
                             size_adjectives=size_adjectives, percentage_train=0.8,
                             min_object_size=1, max_object_size=4, sample_vocabulary='default',
                             save_directory=TEST_DIRECTORY, grid_size=15, type_grammar="adverb")
+
+TEST_DATASET_2 = GroundedScan(intransitive_verbs=intransitive_verbs,
+                              transitive_verbs=transitive_verbs,
+                              adverbs=adverbs, nouns=nouns,
+                              color_adjectives=color_adjectives,
+                              size_adjectives=size_adjectives, percentage_train=0.8,
+                              min_object_size=1, max_object_size=4, sample_vocabulary='default',
+                              save_directory=TEST_DIRECTORY, grid_size=6, type_grammar="adverb")
+
 
 TEST_DATASET_NONCE = GroundedScan(intransitive_verbs=1,
                                   transitive_verbs=2,
@@ -105,8 +115,8 @@ def test_save_and_load_dataset(dataset):
             example_two["input_command"]), "test_save_and_load_dataset FAILED"
         assert dataset.command_repr(example_one["target_command"]) == test_grounded_scan.command_repr(
             example_two["target_command"]), "test_save_and_load_dataset FAILED"
-        assert np.array_equal(example_one["situation_image"], example_two["situation_image"]),\
-            "test_save_and_load_dataset FAILED"
+        assert np.array_equatest_save_and_load_datasetl(example_one["situation_image"], example_two["situation_image"]),\
+            " FAILED"
         assert dataset.command_repr(example_one["input_meaning"]) == test_grounded_scan.command_repr(
             example_two["input_meaning"]), "test_save_and_load_dataset FAILED"
     os.remove(os.path.join(TEST_DIRECTORY, "test.txt"))
@@ -796,6 +806,755 @@ def test_k_shot_generalization(dataset):
     logger.info("test_k_shot_generalization PASSED in {} seconds".format(end - start))
 
 
+def test_apply_while_spinning():
+    start = time.time()
+    meta_grammar = dsl.MetaGrammar()
+    while_spinning = dsl.LSystem()
+    while_spinning.add_rule(meta_grammar.get_rule(lhs_str="Walk",
+                                                  rhs_str="ACTION Walk"))
+    while_spinning.add_rule(meta_grammar.get_rule(lhs_str="ACTION",
+                                                  rhs_str="Tl"),
+                            terminal_rule=True)
+    while_spinning.add_rule(meta_grammar.get_rule(lhs_str="Push",
+                                                  rhs_str="ACTION Push"))
+    while_spinning.finish_l_system()
+
+    while_spinning_2 = dsl.apply_recursion(while_spinning, max_recursion=4)
+
+    # First sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Walk, dsl.Tl, dsl.Walk, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, while_spinning_2, 0, 1)
+    expected_str_sequence = "Tl Tl Tl Tl Walk Tl Tl Tl Tl Tl Walk"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_spinning FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Second sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Push, dsl.Tl, dsl.Walk, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, while_spinning, 0, 4)
+    expected_str_sequence = "Tl Tl Tl Tl Push Tl Tl Tl Tl Tl Walk"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_spinning FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Third sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Tl, dsl.Stay, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, while_spinning_2, 0, 1)
+    expected_str_sequence = "Tl Stay"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_spinning FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Fourth sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Tl, dsl.Tr, dsl.Walk, dsl.Push, dsl.Push, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, while_spinning, 0, 4)
+    expected_str_sequence = "Tl Tr Tl Tl Tl Tl Walk Tl Tl Tl Tl Push Tl Tl Tl Tl Push"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_spinning FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    end = time.time()
+    logger.info("test_apply_while_spinning PASSED in {} seconds".format(end - start))
+
+
+def test_apply_cautiously():
+    start = time.time()
+    meta_grammar = dsl.MetaGrammar()
+    cautiously = dsl.LSystem()
+    cautiously.add_rule(meta_grammar.get_rule(lhs_str="Walk",
+                                              rhs_str="ACTION Walk"))
+    cautiously.add_rule(meta_grammar.get_rule(lhs_str="Push",
+                                              rhs_str="ACTION Push"))
+    cautiously.add_rule(meta_grammar.get_rule(lhs_str="{ACTION}ACTION ACTION{ACTION}",
+                                              rhs_str="Tl Tl"),
+                        terminal_rule=True)
+    cautiously.add_rule(meta_grammar.get_rule(lhs_str="ACTION",
+                                              rhs_str="Tr"),
+                        terminal_rule=True)
+    cautiously.finish_l_system()
+
+    cautiously_2 = dsl.apply_recursion(cautiously, max_recursion=4)
+
+    # First sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Walk, dsl.Tl, dsl.Walk, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, cautiously_2, 0, 1)
+    expected_str_sequence = "Tr Tl Tl Tr Walk Tl Tr Tl Tl Tr Walk"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_cautiously FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Second sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.Tl])
+    dsl.apply_lsystem(sequence, cautiously, 0, 4)
+    expected_str_sequence = "Tl"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_cautiously FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Third sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Push, dsl.Tr, dsl.Tr, dsl.Push, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, cautiously_2, 0, 1)
+    expected_str_sequence = "Tr Tl Tl Tr Push Tr Tr Tr Tl Tl Tr Push"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_cautiously FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Fourth sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Walk, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, cautiously, 0, 4)
+    expected_str_sequence = "Tr Tl Tl Tr Walk"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_cautiously FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    end = time.time()
+    logger.info("test_apply_cautiously PASSED in {} seconds".format(end - start))
+
+
+def test_apply_hesitantly():
+    start = time.time()
+    meta_grammar = dsl.MetaGrammar()
+    hesitantly = dsl.LSystem()
+    hesitantly.add_rule(meta_grammar.get_rule(lhs_str="Walk",
+                                              rhs_str="Walk ACTION"))
+    hesitantly.add_rule(meta_grammar.get_rule(lhs_str="Push",
+                                              rhs_str="Push ACTION"))
+    hesitantly.add_rule(meta_grammar.get_rule(lhs_str="ACTION",
+                                              rhs_str="Stay"),
+                        terminal_rule=True)
+    hesitantly.finish_l_system()
+
+    hesitantly_2 = dsl.apply_recursion(hesitantly, max_recursion=1)
+
+    # First sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Walk, dsl.Tl, dsl.Walk, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, hesitantly, 0, 1)
+    expected_str_sequence = "Walk Stay Tl Walk Stay"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_hesitantly FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Second sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Tl, dsl.Walk, dsl.Walk, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, hesitantly_2, 0, 1)
+    expected_str_sequence = "Tl Walk Stay Walk Stay"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_hesitantly FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Third sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Tl, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, hesitantly, 0, 1)
+    expected_str_sequence = "Tl"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_hesitantly FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Third sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY, dsl.Push, dsl.Walk, dsl.EMPTY])
+    dsl.apply_lsystem(sequence, hesitantly_2, 0, 1)
+    expected_str_sequence = "Push Stay Walk Stay"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_hesitantly FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Fourth sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.EMPTY])
+    dsl.apply_lsystem(sequence, hesitantly, 0, 1)
+    expected_str_sequence = ""
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_hesitantly FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    end = time.time()
+    logger.info("test_apply_hesitantly PASSED in {} seconds".format(end - start))
+
+
+def test_apply_while_zigzagging():
+    start = time.time()
+    meta_grammar = dsl.MetaGrammar()
+    while_zigzagging = dsl.LSystem()
+    while_zigzagging.add_rule(meta_grammar.get_rule(lhs_str="East South",
+                                                    rhs_str="South East"))
+    while_zigzagging.add_rule(meta_grammar.get_rule(lhs_str="East North",
+                                                    rhs_str="North East"))
+    while_zigzagging.add_rule(meta_grammar.get_rule(lhs_str="West North",
+                                                    rhs_str="North West"))
+    while_zigzagging.add_rule(meta_grammar.get_rule(lhs_str="West South",
+                                                    rhs_str="South West"))
+    while_zigzagging.finish_l_system()
+
+    # First sequence
+    sequence = dsl.Sequence()
+    # 3 cols, 2 rows
+    sequence.extend([dsl.East, dsl.East, dsl.East, dsl.South, dsl.South])
+    dsl.apply_lsystem(sequence, while_zigzagging, 0, 2)
+    expected_str_sequence = "East South East South East"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_zigzagging FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Second sequence
+    sequence = dsl.Sequence()
+    # 5 cols, 2 rows
+    sequence.extend([dsl.East, dsl.East, dsl.East, dsl.East, dsl.East, dsl.South, dsl.South])
+    dsl.apply_lsystem(sequence, while_zigzagging, 0, 4)
+    expected_str_sequence = "East South East South East East East"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_zigzagging FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Third sequence
+    sequence = dsl.Sequence()
+    # 2 cols, 5 rows
+    sequence.extend([dsl.East, dsl.East, dsl.South, dsl.South, dsl.South, dsl.South, dsl.South])
+    dsl.apply_lsystem(sequence, while_zigzagging, 0, 1)
+    expected_str_sequence = "East South East South South South South"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_zigzagging FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Fourth sequence
+    sequence = dsl.Sequence()
+    # 2 cols, 5 rows
+    sequence.extend([dsl.West, dsl.West, dsl.South, dsl.South, dsl.South, dsl.South, dsl.South])
+    dsl.apply_lsystem(sequence, while_zigzagging, 0, 1)
+    expected_str_sequence = "West South West South South South South"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_zigzagging FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Fifth sequence
+    sequence = dsl.Sequence()
+    # 3 cols
+    sequence.extend([dsl.West, dsl.West, dsl.West])
+    dsl.apply_lsystem(sequence, while_zigzagging, 0, 4)
+    expected_str_sequence = "West West West"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_zigzagging FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    # Sixt sequence
+    sequence = dsl.Sequence()
+    # 3 cols, 2 rows
+    sequence.extend([dsl.West, dsl.West, dsl.West, dsl.North, dsl.North])
+    dsl.apply_lsystem(sequence, while_zigzagging, 0, 2)
+    expected_str_sequence = "West North West North West"
+    actual_str_sequence = str(sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_apply_while_zigzagging FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence, str(sequence))
+
+    end = time.time()
+    logger.info("test_apply_while_zigzagging PASSED in {} seconds".format(end - start))
+
+
+def test_convert_sequence_to_actions():
+    start = time.time()
+
+    # First sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.East, dsl.East, dsl.East, dsl.South, dsl.South])
+    actual_sequence = dsl.convert_sequence_to_actions(sequence, agent_start_dir=dsl.NORTH)
+    expected_str_sequence = "Tr Walk Walk Walk Tr Walk Walk"
+    actual_str_sequence = str(actual_sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_convert_sequence_to_actions FAILED for \nexpected %s \nactual: %s" % (expected_str_sequence,
+                                                                                    actual_str_sequence)
+
+    # Second sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.East, dsl.South, dsl.East, dsl.South, dsl.South])
+    actual_sequence = dsl.convert_sequence_to_actions(sequence, agent_start_dir=dsl.WEST)
+    expected_str_sequence = "Tl Tl Walk Tr Walk Tl Walk Tr Walk Walk"
+    actual_str_sequence = str(actual_sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_convert_sequence_to_actions FAILED for \nexpected %s \nactual: %s" % (
+        expected_str_sequence, actual_str_sequence)
+
+    # Third sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.South, dsl.South, dsl.East, dsl.South, dsl.South])
+    actual_sequence = dsl.convert_sequence_to_actions(sequence, agent_start_dir=dsl.WEST)
+    expected_str_sequence = "Tl Walk Walk Tl Walk Tr Walk Walk"
+    actual_str_sequence = str(actual_sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_convert_sequence_to_actions FAILED for \nexpected %s \nactual: %s" % (
+            expected_str_sequence, actual_str_sequence)
+
+    # Fourth sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.North, dsl. South, dsl.North])
+    actual_sequence = dsl.convert_sequence_to_actions(sequence, agent_start_dir=dsl.SOUTH)
+    expected_str_sequence = "Tl Tl Walk Tl Tl Walk Tl Tl Walk"
+    actual_str_sequence = str(actual_sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_convert_sequence_to_actions FAILED for \nexpected %s \nactual: %s" % (
+            expected_str_sequence, actual_str_sequence)
+
+    # Fifth sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.West, dsl.North, dsl.North, dsl.West])
+    actual_sequence = dsl.convert_sequence_to_actions(sequence, agent_start_dir=dsl.SOUTH)
+    expected_str_sequence = "Tr Walk Tr Walk Walk Tl Walk"
+    actual_str_sequence = str(actual_sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_convert_sequence_to_actions FAILED for \nexpected %s \nactual: %s" % (
+            expected_str_sequence, actual_str_sequence)
+
+    # Sixth sequence
+    sequence = dsl.Sequence()
+    sequence.extend([dsl.West, dsl.West, dsl.West])
+    actual_sequence = dsl.convert_sequence_to_actions(sequence, agent_start_dir=dsl.WEST)
+    expected_str_sequence = "Walk Walk Walk"
+    actual_str_sequence = str(actual_sequence)
+    assert actual_str_sequence == expected_str_sequence, \
+        "test_convert_sequence_to_actions FAILED for \nexpected %s \nactual: %s" % (
+            expected_str_sequence, actual_str_sequence)
+
+    end = time.time()
+    logger.info("test_convert_sequence_to_actions PASSED in {} seconds".format(end - start))
+
+
+def test_dsl_gscan(dataset):
+    start = time.time()
+
+    original_start_pos = TEST_SITUATION_1.agent_pos
+    original_start_dir = TEST_SITUATION_1.agent_direction
+
+    start_positions = [dsl.Position(row=5, column=3), dsl.Position(row=0, column=3),
+                       dsl.Position(row=7, column=7), dsl.Position(row=13, column=7),
+                       dsl.Position(row=14, column=13), dsl.Position(row=0, column=0),
+                       dsl.Position(row=5, column=2), dsl.Position(row=14, column=8),
+                       dsl.Position(row=9, column=0), dsl.Position(row=0, column=1)]
+    start_directions = [dsl.WEST, dsl.WEST, dsl.NORTH, dsl.SOUTH, dsl.EAST, dsl.WEST,
+                        dsl.EAST, dsl.EAST, dsl.NORTH, dsl.SOUTH]
+    end_positions = [dsl.Position(row=0, column=0), dsl.Position(row=3, column=0),
+                     dsl.Position(row=13, column=7), dsl.Position(row=13, column=2),
+                     dsl.Position(row=0, column=2), dsl.Position(row=0, column=0),
+                     dsl.Position(row=7, column=2), dsl.Position(row=11, column=10),
+                     dsl.Position(row=0, column=3), dsl.Position(row=13, column=12)]
+    start_positions.extend(end_positions)
+    extra_positions = end_positions.copy()
+    extra_directions = start_directions.copy()
+    random.shuffle(extra_directions)
+    random.shuffle(extra_positions)
+    start_positions.extend(extra_positions)
+    end_positions.extend(start_positions)
+    random.shuffle(extra_positions)
+    end_positions.extend(extra_positions)
+    start_directions.extend(reversed(start_directions))
+    start_directions.extend(extra_directions)
+
+    gscan = dsl.Gscan()
+    spinning_adverbs = [gscan.spin, gscan.cautiously, gscan.hesitantly]
+    spinning_adverb_texts = ["spin", "cautious", "hesitantly"]
+
+    for i, (start_pos, agent_start_dir, end_pos) in enumerate(zip(start_positions,
+                                                                  start_directions,
+                                                                  end_positions)):
+        TEST_SITUATION_1.agent_pos = start_pos
+        TEST_SITUATION_1.agent_direction = agent_start_dir
+        planned_sequence = dsl.simulate_planner(start_pos, end_pos)
+        col_distance = abs(start_pos.column - end_pos.column)
+        sample_recursion = random.randint(0, col_distance*2)
+        if (i + 1) % 4 == 0:
+            gscan.zigzag(planned_sequence, sample_recursion)
+        target_action_sequence = dsl.convert_sequence_to_actions(planned_sequence, agent_start_dir)
+        if i % 4 != 0:
+            idx = i % 3
+            spinning_adverbs[idx](target_action_sequence, recursion_depth=1)
+        command = "Test"
+        target_actions = target_action_sequence.get_gscan_actions()
+        _, _, end_column, end_row = dataset.demonstrate_target_commands(command,
+                                                                        TEST_SITUATION_1,
+                                                                        target_actions)
+        assert end_column == end_pos.column and end_row == end_pos.row, \
+            "test_dsl_gscan FAILED for expected end pos ({},{}), actual ({},{})".format(
+                end_pos.row, end_pos.column, end_row, end_column
+            )
+
+    end = time.time()
+    logger.info("test_dsl_gscan PASSED in {} seconds".format(end - start))
+
+    TEST_SITUATION_1.agent_pos = original_start_pos
+    TEST_SITUATION_1.agent_direction = original_start_dir
+
+
+def test_get_num_push_pull_actions(dataset):
+    start = time.time()
+    current_situation = dataset._world.get_current_situation()
+    current_mission = dataset._world.mission
+
+    dataset._world.clear_situation()
+    dataset.initialize_world(TEST_SITUATION_1)
+
+    # First test
+    last_direction = dsl.EAST
+    position = dsl.Position(column=0, row=0)
+    expected_free_push = 14
+    expected_free_pull = 0
+    actual_free_push = dsl.get_num_push_actions(last_direction, position,
+                                                dataset._world.grid)
+    actual_free_pull = dsl.get_num_pull_actions(last_direction, position,
+                                                dataset._world.grid)
+    assert actual_free_pull == expected_free_pull, "Wrong number of pull actions, expected {}, actual {}".format(
+        expected_free_pull, actual_free_pull)
+    assert actual_free_push == expected_free_push, "Wrong number of push actions, expected {}, actual {}".format(
+        expected_free_push, actual_free_push)
+
+    # Second test
+    last_direction = dsl.EAST
+    position = dsl.Position(column=12, row=10)
+    expected_free_push = 2
+    expected_free_pull = 7
+    actual_free_push = dsl.get_num_push_actions(last_direction, position,
+                                                dataset._world.grid)
+    actual_free_pull = dsl.get_num_pull_actions(last_direction, position,
+                                                dataset._world.grid)
+    assert actual_free_pull == expected_free_pull, "Wrong number of pull actions, expected {}, actual {}".format(
+        expected_free_pull, actual_free_pull)
+    assert actual_free_push == expected_free_push, "Wrong number of push actions, expected {}, actual {}".format(
+        expected_free_push, actual_free_push)
+
+    # Third test
+    last_direction = dsl.SOUTH
+    position = dsl.Position(column=12, row=10)
+    expected_free_push = 4
+    expected_free_pull = 6
+    actual_free_push = dsl.get_num_push_actions(last_direction, position,
+                                                dataset._world.grid)
+    actual_free_pull = dsl.get_num_pull_actions(last_direction, position,
+                                                dataset._world.grid)
+    assert actual_free_pull == expected_free_pull, "Wrong number of pull actions, expected {}, actual {}".format(
+        expected_free_pull, actual_free_pull)
+    assert actual_free_push == expected_free_push, "Wrong number of push actions, expected {}, actual {}".format(
+        expected_free_push, actual_free_push)
+
+    # Fourth test
+    last_direction = dsl.NORTH
+    position = dsl.Position(column=12, row=10)
+    expected_free_push = 6
+    expected_free_pull = 4
+    actual_free_push = dsl.get_num_push_actions(last_direction, position,
+                                                dataset._world.grid)
+    actual_free_pull = dsl.get_num_pull_actions(last_direction, position,
+                                                dataset._world.grid)
+    assert actual_free_pull == expected_free_pull, "Wrong number of pull actions, expected {}, actual {}".format(
+        expected_free_pull, actual_free_pull)
+    assert actual_free_push == expected_free_push, "Wrong number of push actions, expected {}, actual {}".format(
+        expected_free_push, actual_free_push)
+
+    # Fifth test
+    last_direction = dsl.WEST
+    position = dsl.Position(column=6, row=9)
+    expected_free_push = 6
+    expected_free_pull = 8
+    actual_free_push = dsl.get_num_push_actions(last_direction, position,
+                                                dataset._world.grid)
+    actual_free_pull = dsl.get_num_pull_actions(last_direction, position,
+                                                dataset._world.grid)
+    assert actual_free_pull == expected_free_pull, "Wrong number of pull actions, expected {}, actual {}".format(
+        expected_free_pull, actual_free_pull)
+    assert actual_free_push == expected_free_push, "Wrong number of push actions, expected {}, actual {}".format(
+        expected_free_push, actual_free_push)
+
+    # Sixth test
+    last_direction = dsl.NORTH
+    position = dsl.Position(column=12, row=4)
+    expected_free_push = 0
+    expected_free_pull = 10
+    actual_free_push = dsl.get_num_push_actions(last_direction, position,
+                                                dataset._world.grid)
+    actual_free_pull = dsl.get_num_pull_actions(last_direction, position,
+                                                dataset._world.grid)
+    assert actual_free_pull == expected_free_pull, "Wrong number of pull actions, expected {}, actual {}".format(
+        expected_free_pull, actual_free_pull)
+    assert actual_free_push == expected_free_push, "Wrong number of push actions, expected {}, actual {}".format(
+        expected_free_push, actual_free_push)
+
+    dataset.initialize_world(current_situation, mission=current_mission)
+    end = time.time()
+    logger.info("test_get_num_push_pull_actions PASSED in {} seconds".format(end - start))
+
+
+def test_gscan_examples(dataset):
+    start = time.time()
+    current_situation = dataset._world.get_current_situation()
+    current_mission = dataset._world.mission
+    num_generate_examples = 100000
+    num_test_examples = 10000
+    logger.info("test_gscan_examples loading {} and testing {} examples. Might take a while.".format(num_generate_examples,
+                                                                                                     num_test_examples))
+    dataset.get_data_pairs(max_examples=num_generate_examples)
+    indices = [i for i in range(len(dataset._data_pairs["train"]))]
+    random.shuffle(indices)
+    gscan = dsl.Gscan()
+    verb_adverb = {}
+    num_examples_tested = 0
+    for example_idx in indices[:num_test_examples]:
+        example = dataset._data_pairs["train"][example_idx]
+        if (num_examples_tested + 1) % 500 == 0:
+            logger.info("Tested {} of {} examples succesfully".format(
+                num_examples_tested, num_test_examples))
+        verb_in_command = example["verb_in_command"]
+        manner = example["manner"]
+        if verb_in_command not in verb_adverb.keys():
+            verb_adverb[verb_in_command] = {}
+        if not manner:
+            manner_str = "no_manner"
+        else:
+            manner_str = manner
+        if manner_str not in verb_adverb[verb_in_command].keys():
+            verb_adverb[verb_in_command][manner_str] = 0
+        verb_adverb[verb_in_command][manner_str] += 1
+        size = int(example["situation"]["target_object"]["object"]["size"])
+        heavy = False
+        if size in dataset._world._object_vocabulary._heavy_weights.keys():
+            heavy = True
+        target_position = example["situation"]["target_object"]["position"]
+        target_position = dsl.Position(column=int(target_position["column"]),
+                                       row=int(target_position["row"]))
+        start_position = example["situation"]["agent_position"]
+        start_position = dsl.Position(column=int(start_position["column"]),
+                                      row=int(start_position["row"]))
+        situation = Situation.from_representation(example["situation"])
+        dataset.initialize_world(situation, example["command"])
+        grid = dataset._world.grid
+        start_direction = example["situation"]["agent_direction"]
+        expected_target_commands = example["target_commands"]
+        actual_target_commands = gscan.parse_gscan_example(verb_in_command,
+                                                           start_position,
+                                                           start_direction,
+                                                           target_position,
+                                                           manner,
+                                                           grid,
+                                                           heavy)
+        actual_target_commands = ",".join(actual_target_commands)
+        assert expected_target_commands == actual_target_commands, \
+            "test_gscan_examples FAILED with verb {}, manner {}," \
+            "expected commands: {}, actual commands: {}".format(verb_in_command, manner,
+                                                                expected_target_commands,
+                                                                actual_target_commands)
+        num_examples_tested += 1
+
+    dataset.initialize_world(current_situation, mission=current_mission)
+    end = time.time()
+    logger.info("test_gscan_examples PASSED in {} seconds".format(end - start))
+
+
+def test_adverb_sampling(dataset):
+    start = time.time()
+    current_situation = dataset._world.get_current_situation()
+    current_mission = dataset._world.mission
+
+    world = dsl.World(num_adverbs=5, seed=1)
+    movement_rewrite_adverbs = world.generate_all_adverbs("movement_rewrite")
+    movement_adverbs = world.generate_all_adverbs("movement")
+    nonmovement_direction_adverbs = world.generate_all_adverbs("nonmovement_direction")
+    nonmovement_first_person_adverbs = world.generate_all_adverbs(
+        "nonmovement_first_person")
+    print("movement_rewrite {}".format(len(movement_rewrite_adverbs)))
+    print("movement_adverbs {}".format(len(movement_adverbs)))
+    print("nonmovement_direction_adverbs {}".format(len(nonmovement_direction_adverbs)))
+    print("nonmovement_first_person_adverbs {}".format(len(nonmovement_first_person_adverbs)))
+    all_adverbs = {"nonmovement_direction": nonmovement_direction_adverbs,
+                   "movement_adverbs": movement_adverbs,
+                   "movement_rewrite": movement_rewrite_adverbs,
+                   "nonmovement_first_person": nonmovement_first_person_adverbs}
+    recursions_on_sequence = [lambda cols, rows: 1,
+                              lambda cols, rows: cols - 1,
+                              lambda cols, rows: rows - 1,
+                              lambda cols, rows: cols + rows - 1]
+    other_recursions = [lambda cols, rows: 1,
+                        lambda cols, rows: 2,
+                        lambda cols, rows: 3,
+                        lambda cols, rows: 4]
+    zero_recursions = [lambda cols, rows: 1,
+                       lambda cols, rows: 1,
+                       lambda cols, rows: 1,
+                       lambda cols, rows: 1]
+    all_recursions_system = {"nonmovement_direction": other_recursions,
+                             "movement_adverbs": other_recursions,
+                             "movement_rewrite": zero_recursions,
+                             "nonmovement_first_person": other_recursions}
+    all_recursions_sequence = {"nonmovement_direction": zero_recursions,
+                               "movement_adverbs": zero_recursions,
+                               "movement_rewrite": recursions_on_sequence,
+                               "nonmovement_first_person": zero_recursions}  # TODO: HIER GEBLEVEN
+    adverb_type = ["nonmovement_first_person",
+                   "nonmovement_direction",
+                   "movement_adverbs",
+                   "movement_rewrite"]
+    for type in adverb_type:
+        adverb_list = all_adverbs[type]
+        recursions_system = all_recursions_system[type]
+        recursions_sequence = all_recursions_sequence[type]
+        # adverbs_to_test = random.sample(adverb_list, 5)
+        adverbs_to_test = adverb_list[:5]
+        to_visualize = random.sample(range(5), 5)
+        for i, adverb in enumerate(adverbs_to_test):
+            if i in to_visualize:
+                parent_save_dir = "{}_{}".format(type, i)
+                save_dir = os.path.join(TEST_DIRECTORY, parent_save_dir)
+                if not os.path.exists(save_dir):
+                    os.mkdir(save_dir)
+                infile = open(os.path.join(save_dir, "l_system.txt"), "w")
+                infile.write(str(adverb))
+            for recursion_lambda_system, recursion_lambda_sequence in zip(recursions_system, recursions_sequence):
+                for _ in range(1):
+                    start_direction = random.randint(0, 3)
+                    start_row = random.randint(0, dataset._world.grid_size - 1)
+                    start_col = random.randint(0, dataset._world.grid_size - 1)
+                    end_row = random.randint(0, dataset._world.grid_size - 1)
+                    end_col = random.randint(0, dataset._world.grid_size - 1)
+                    num_rows = abs(end_row - start_row)
+                    num_cols = abs(end_col - start_col)
+                    recursion_system = recursion_lambda_system(num_cols, num_rows)
+                    recursion_sequence = recursion_lambda_sequence(num_cols, num_rows)
+                    if i in to_visualize:
+                        infile.write("num_cols %d num_rows %d recursion system %d\n" % (num_cols,
+                                                                                 num_rows,
+                                                                                 recursion_system))
+                        infile.write("num_cols %d num_rows %d recursion sequence %d\n" % (num_cols,
+                                                                                          num_rows,
+                                                                                          recursion_sequence))
+                    start_position = dsl.Position(row=start_row, column=start_col)
+                    end_position = dsl.Position(row=end_row, column=end_col)
+                    current_situation = Situation(grid_size=dataset._world.grid_size,
+                                                  agent_position=start_position,
+                                                  agent_direction=INT_TO_DIR[start_direction],
+                                                  target_object=PositionedObject(
+                                                      object=Object(size=2, color='red', shape='circle'),
+                                                      position=end_position,
+                                                      vector=np.array([1, 0, 1])),
+                                                  placed_objects=[PositionedObject(
+                                                      object=Object(size=2, color='red', shape='circle'),
+                                                      position=end_position,
+                                                      vector=np.array([1, 0, 1]))], carrying=None)
+                    # dataset.initialize_world(current_situation, mission=current_mission)
+                    sequence, is_rejected = world.generate_example(start_position,
+                                                      start_direction,
+                                                      end_position,
+                                                      adverb,
+                                                      recursion_depth_system=recursion_system,
+                                                      recursion_depth_sequence=recursion_sequence,
+                                                      grid_size=dataset._world.grid_size,
+                                                      type_adverb=type)
+                    if is_rejected:
+                        logger.info("Rejected L-system.")
+                        logger.info(str(adverb))
+                        if i in to_visualize:
+                            infile.write("Rejected L-system.\n")
+                        continue
+                    (commands, demonstration,
+                     actual_end_col, actual_end_row) = dataset.demonstrate_target_commands(
+                        "", current_situation, target_commands=sequence)
+                    if i in to_visualize:
+                        mission = ' '.join(["\n      Target:"] + commands)
+
+                        save_dir_prediction = dataset.visualize_command(
+                            current_situation, "command", demonstration, mission=mission,
+                            parent_save_dir=parent_save_dir)
+                    assert end_col == actual_end_col, "Wrong end col for adverb_type {}".format(type)
+                    assert end_row == actual_end_row, "Wrong end row for adverb_type {}".format(type)
+            if i in to_visualize:
+                infile.close()
+    dataset.initialize_world(current_situation, mission=current_mission)
+    end = time.time()
+    logger.info("test_adverb_sampling PASSED in {} seconds".format(end - start))
+
+
+def test_remove_out_of_grid(dataset):
+    start = time.time()
+    current_situation = dataset._world.get_current_situation()
+    current_mission = dataset._world.mission
+
+    meta_grammar = dsl.MetaGrammar()
+    world = dsl.World(num_adverbs=5, seed=1)
+    l_system = dsl.LSystem()
+    l_system.add_rule(meta_grammar.get_rule(lhs_str="West",
+                                            rhs_str="North West South"))
+    l_system.add_rule(meta_grammar.get_rule(lhs_str="East",
+                                            rhs_str="North East South"))
+    l_system.add_rule(meta_grammar.get_rule(lhs_str="North",
+                                            rhs_str="East North West"))
+    l_system.add_rule(meta_grammar.get_rule(lhs_str="South",
+                                            rhs_str="East South West"))
+    l_system.finish_l_system()
+
+    start_direction = 0
+    start_position = dsl.Position(row=0, column=0)
+    end_position = dsl.Position(row=5, column=5)
+    sequence = world.generate_example(start_position,
+                                      start_direction,
+                                      end_position,
+                                      l_system,
+                                      recursion_depth_system=0,
+                                      recursion_depth_sequence=1,
+                                      grid_size=6)
+    sequence_two = world.generate_example(start_position,
+                                          start_direction,
+                                          end_position,
+                                          l_system,
+                                          recursion_depth_system=1,
+                                          recursion_depth_sequence=1,
+                                          grid_size=6)
+    sequence_three = world.generate_example(start_position,
+                                            start_direction,
+                                            end_position,
+                                            l_system,
+                                            recursion_depth_system=1,
+                                            recursion_depth_sequence=2,
+                                            grid_size=6)
+    current_situation = Situation(grid_size=6,
+                                  agent_position=start_position,
+                                  agent_direction=INT_TO_DIR[start_direction],
+                                  target_object=PositionedObject(
+                                      object=Object(size=2, color='red', shape='circle'),
+                                      position=end_position,
+                                      vector=np.array([1, 0, 1])),
+                                  placed_objects=[PositionedObject(
+                                      object=Object(size=2, color='red', shape='circle'),
+                                      position=end_position,
+                                      vector=np.array([1, 0, 1])),
+                                      PositionedObject(
+                                          object=Object(size=4, color='green', shape='circle'),
+                                          position=Position(row=3, column=3),
+                                          vector=np.array([0, 1, 0]))], carrying=None)
+
+    (commands, demonstration,
+     end_col, end_row) = dataset.demonstrate_target_commands(
+        "", current_situation, target_commands=sequence)
+    assert end_col == end_col, "Wrong end col"
+    assert end_row == end_row, "Wrong end row"
+    (commands, demonstration,
+     end_col, end_row) = dataset.demonstrate_target_commands(
+        "", current_situation, target_commands=sequence_two)
+    assert end_col == end_col, "Wrong end col"
+    assert end_row == end_row, "Wrong end row"
+    (commands, demonstration,
+     end_col, end_row) = dataset.demonstrate_target_commands(
+        "", current_situation, target_commands=sequence_three)
+    assert end_col == end_col, "Wrong end col"
+    assert end_row == end_row, "Wrong end row"
+
+    end = time.time()
+    logger.info("test_adverb_sampling PASSED in {} seconds".format(end - start))
+
+
 def run_all_tests():
     # test_save_and_load_dataset(TEST_DATASET)
     # test_save_and_load_dataset(TEST_DATASET_NONCE)
@@ -850,4 +1609,15 @@ def run_all_tests():
     #test_k_shot_generalization(TEST_DATASET)
     #test_k_shot_generalization(TEST_DATASET_NONCE)
     test_generate_manners()
+    test_apply_while_spinning()
+    test_apply_cautiously()
+    test_apply_hesitantly()
+    test_apply_while_zigzagging()
+    test_convert_sequence_to_actions()
+    test_dsl_gscan(TEST_DATASET)
+    test_get_num_push_pull_actions(TEST_DATASET)
+    test_gscan_examples(TEST_DATASET_2)
+    test_adverb_sampling(TEST_DATASET_2)
+    test_remove_out_of_grid(TEST_DATASET_2)
+    # test_gscan(TEST_DATASET)
     # shutil.rmtree(TEST_DIRECTORY)
