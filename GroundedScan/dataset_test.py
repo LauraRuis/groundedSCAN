@@ -1294,8 +1294,9 @@ def test_gscan_examples(dataset):
     start = time.time()
     current_situation = dataset._world.get_current_situation()
     current_mission = dataset._world.mission
-    num_generate_examples = 100000
-    num_test_examples = 10000
+    num_generate_examples = 10000
+    num_test_examples = 1000
+    # TODO: how to make sure push/pull/walk and all adverbs are tested
     logger.info("test_gscan_examples loading {} and testing {} examples. Might take a while.".format(num_generate_examples,
                                                                                                      num_test_examples))
     dataset.get_data_pairs(max_examples=num_generate_examples)
@@ -1360,12 +1361,12 @@ def test_adverb_sampling(dataset):
     current_situation = dataset._world.get_current_situation()
     current_mission = dataset._world.mission
 
-    world = dsl.World(num_adverbs=5, seed=1)
-    movement_rewrite_adverbs = world.generate_all_adverbs("movement_rewrite")
-    movement_adverbs = world.generate_all_adverbs("movement")
-    nonmovement_direction_adverbs = world.generate_all_adverbs("nonmovement_direction")
-    nonmovement_first_person_adverbs = world.generate_all_adverbs(
-        "nonmovement_first_person")
+    world = dsl.AdverbWorld(seed=1)
+    movement_rewrite_adverbs = world._all_adverbs["movement_rewrite"]
+    movement_adverbs = world._all_adverbs["movement"]
+    nonmovement_direction_adverbs = world._all_adverbs["nonmovement_direction"]
+    nonmovement_first_person_adverbs = world._all_adverbs[
+        "nonmovement_first_person"]
     print("movement_rewrite {}".format(len(movement_rewrite_adverbs)))
     print("movement_adverbs {}".format(len(movement_adverbs)))
     print("nonmovement_direction_adverbs {}".format(len(nonmovement_direction_adverbs)))
@@ -1393,7 +1394,7 @@ def test_adverb_sampling(dataset):
     all_recursions_sequence = {"nonmovement_direction": zero_recursions,
                                "movement_adverbs": zero_recursions,
                                "movement_rewrite": recursions_on_sequence,
-                               "nonmovement_first_person": zero_recursions}  # TODO: HIER GEBLEVEN
+                               "nonmovement_first_person": zero_recursions}
     adverb_type = ["nonmovement_first_person",
                    "nonmovement_direction",
                    "movement_adverbs",
@@ -1402,8 +1403,8 @@ def test_adverb_sampling(dataset):
         adverb_list = all_adverbs[type]
         recursions_system = all_recursions_system[type]
         recursions_sequence = all_recursions_sequence[type]
-        # adverbs_to_test = random.sample(adverb_list, 5)
-        adverbs_to_test = adverb_list[:5]
+        adverbs_to_test = random.sample(adverb_list, 10)
+        # adverbs_to_test = adverb_list[:5]
         to_visualize = random.sample(range(5), 5)
         for i, adverb in enumerate(adverbs_to_test):
             if i in to_visualize:
@@ -1479,11 +1480,11 @@ def test_adverb_sampling(dataset):
 
 def test_remove_out_of_grid(dataset):
     start = time.time()
-    current_situation = dataset._world.get_current_situation()
-    current_mission = dataset._world.mission
+    init_current_situation = dataset._world.get_current_situation()
+    init_current_mission = dataset._world.mission
 
     meta_grammar = dsl.MetaGrammar()
-    world = dsl.World(num_adverbs=5, seed=1)
+    world = dsl.AdverbWorld(seed=1)
     l_system = dsl.LSystem()
     l_system.add_rule(meta_grammar.get_rule(lhs_str="West",
                                             rhs_str="North West South"))
@@ -1497,28 +1498,33 @@ def test_remove_out_of_grid(dataset):
 
     start_direction = 0
     start_position = dsl.Position(row=0, column=0)
-    end_position = dsl.Position(row=5, column=5)
-    sequence = world.generate_example(start_position,
-                                      start_direction,
-                                      end_position,
-                                      l_system,
-                                      recursion_depth_system=0,
-                                      recursion_depth_sequence=1,
-                                      grid_size=6)
-    sequence_two = world.generate_example(start_position,
-                                          start_direction,
-                                          end_position,
-                                          l_system,
-                                          recursion_depth_system=1,
-                                          recursion_depth_sequence=1,
-                                          grid_size=6)
-    sequence_three = world.generate_example(start_position,
-                                            start_direction,
-                                            end_position,
-                                            l_system,
-                                            recursion_depth_system=1,
-                                            recursion_depth_sequence=2,
-                                            grid_size=6)
+    expected_end_row = 5
+    expected_end_col = 5
+    end_position = dsl.Position(row=expected_end_row, column=expected_end_col)
+    sequence, rejected = world.generate_example(start_position,
+                                                start_direction,
+                                                end_position,
+                                                l_system,
+                                                recursion_depth_system=0,
+                                                recursion_depth_sequence=1,
+                                                grid_size=6,
+                                                type_adverb="movement")
+    sequence_two, _ = world.generate_example(start_position,
+                                             start_direction,
+                                             end_position,
+                                             l_system,
+                                             recursion_depth_system=1,
+                                             recursion_depth_sequence=1,
+                                             grid_size=6,
+                                             type_adverb="movement")
+    sequence_three, _ = world.generate_example(start_position,
+                                               start_direction,
+                                               end_position,
+                                               l_system,
+                                               recursion_depth_system=1,
+                                               recursion_depth_sequence=2,
+                                               grid_size=6,
+                                               type_adverb="movement")
     current_situation = Situation(grid_size=6,
                                   agent_position=start_position,
                                   agent_direction=INT_TO_DIR[start_direction],
@@ -1538,21 +1544,37 @@ def test_remove_out_of_grid(dataset):
     (commands, demonstration,
      end_col, end_row) = dataset.demonstrate_target_commands(
         "", current_situation, target_commands=sequence)
-    assert end_col == end_col, "Wrong end col"
-    assert end_row == end_row, "Wrong end row"
+    assert expected_end_col == end_col, "test_remove_out_of_grid FAILED. Wrong end col"
+    assert expected_end_row == end_row, "test_remove_out_of_grid FAILED. Wrong end row"
     (commands, demonstration,
      end_col, end_row) = dataset.demonstrate_target_commands(
         "", current_situation, target_commands=sequence_two)
-    assert end_col == end_col, "Wrong end col"
-    assert end_row == end_row, "Wrong end row"
+    assert expected_end_col == end_col, "test_remove_out_of_grid FAILED. Wrong end col"
+    assert expected_end_row == end_row, "test_remove_out_of_grid FAILED. Wrong end row"
     (commands, demonstration,
      end_col, end_row) = dataset.demonstrate_target_commands(
         "", current_situation, target_commands=sequence_three)
-    assert end_col == end_col, "Wrong end col"
-    assert end_row == end_row, "Wrong end row"
+    assert expected_end_col == end_col, "test_remove_out_of_grid FAILED. Wrong end col"
+    assert expected_end_row == end_row, "test_remove_out_of_grid FAILED. Wrong end row"
+
+    dataset.initialize_world(init_current_situation, mission=init_current_mission)
+    end = time.time()
+    logger.info("test_remove_out_of_grid PASSED in {} seconds".format(end - start))
+
+
+def test_generate_adverb_challenge():
+    start = time.time()
+
+    adverb_world = dsl.AdverbWorld(seed=1)
+    data = adverb_world.generate_adverb_challenge(num_training_adverbs=20,
+                                                  num_train_examples_per_train_adverb=50,
+                                                  num_testing_adverbs=5,
+                                                  num_train_examples_per_test_adverb=50,
+                                                  grid_size=6,
+                                                  save_directory=TEST_DIRECTORY)
 
     end = time.time()
-    logger.info("test_adverb_sampling PASSED in {} seconds".format(end - start))
+    logger.info("test_generate_adverb_challenge PASSED in {} seconds".format(end - start))
 
 
 def run_all_tests():
@@ -1606,18 +1628,18 @@ def run_all_tests():
     # test_image_representation_situations(TEST_DATASET_NONCE)
     # test_encode_situation(TEST_DATASET)
     # test_encode_situation(TEST_DATASET_NONCE)
-    #test_k_shot_generalization(TEST_DATASET)
-    #test_k_shot_generalization(TEST_DATASET_NONCE)
-    test_generate_manners()
-    test_apply_while_spinning()
-    test_apply_cautiously()
-    test_apply_hesitantly()
-    test_apply_while_zigzagging()
-    test_convert_sequence_to_actions()
-    test_dsl_gscan(TEST_DATASET)
-    test_get_num_push_pull_actions(TEST_DATASET)
-    test_gscan_examples(TEST_DATASET_2)
-    test_adverb_sampling(TEST_DATASET_2)
-    test_remove_out_of_grid(TEST_DATASET_2)
-    # test_gscan(TEST_DATASET)
+    # test_k_shot_generalization(TEST_DATASET)
+    # test_k_shot_generalization(TEST_DATASET_NONCE)
+    # test_generate_manners()
+    # test_apply_while_spinning()
+    # test_apply_cautiously()
+    # test_apply_hesitantly()
+    # test_apply_while_zigzagging()
+    # test_convert_sequence_to_actions()
+    # test_dsl_gscan(TEST_DATASET)
+    # test_get_num_push_pull_actions(TEST_DATASET)
+    # test_gscan_examples(TEST_DATASET_2)
+    # test_adverb_sampling(TEST_DATASET_2)
+    # test_remove_out_of_grid(TEST_DATASET_2)
+    test_generate_adverb_challenge()
     # shutil.rmtree(TEST_DIRECTORY)

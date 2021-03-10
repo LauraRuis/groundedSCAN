@@ -1478,6 +1478,74 @@ class GroundedScan(object):
         self.initialize_world(current_situation, mission=current_mission)
         return
 
+    def get_adverb_world_states(self, max_examples=None, num_resampling=1, other_objects_sample_percentage=0.5,
+                                min_other_objects=0) -> List[dict]:
+        """
+        Generate data and situations
+        """
+        # Save current situation of the world for later restoration.
+        current_situation = self._world.get_current_situation()
+        current_mission = self._world.mission
+        self.reset_dataset()
+
+        # Generate all situations and commands.
+        situation_specifications = self.generate_situations(num_resampling=num_resampling)
+        self.generate_all_commands(with_nonterminal="RB")
+        example_count = 0
+        all_data = []
+        for template_num, template_derivations in self._grammar.all_derivations.items():
+            for derivation in template_derivations:
+                arguments = []
+                derivation.meaning(arguments)
+                assert len(arguments) == 1, "Only one target object currently supported."
+                target_str, target_predicate = arguments.pop().to_predicate()
+                possible_target_objects = self.generate_possible_targets(
+                    referred_size=self._vocabulary.translate_word(target_predicate["size"]),
+                    referred_color=self._vocabulary.translate_word(target_predicate["color"]),
+                    referred_shape=self._vocabulary.translate_word(target_predicate["noun"]))
+                adverb = ""
+                for word in derivation.words():
+                    if word in self._vocabulary.get_adverbs():
+                        adverb = word
+                for target_size, target_color, target_shape in possible_target_objects:
+                    relevant_situations = situation_specifications[target_shape][target_color][target_size]
+                    for i, relevant_situation in enumerate(relevant_situations):
+                        if (example_count + 1) % 10000 == 0:
+                            logger.info("Number of examples: {}".format(example_count + 1))
+                        if max_examples:
+                            if example_count >= max_examples:
+                                break
+                        self.initialize_world_from_spec(relevant_situation,
+                                                        referred_size=target_predicate["size"],
+                                                        referred_color=target_predicate["color"],
+                                                        referred_shape=target_predicate["noun"],
+                                                        actual_size=target_size,
+                                                        sample_percentage=other_objects_sample_percentage,
+                                                        min_other_objects=min_other_objects
+                                                        )
+                        situation = self._world.get_current_situation()
+                        assert situation.direction_to_target == relevant_situation["direction_to_target"]
+                        assert situation.distance_to_target == relevant_situation["distance_to_target"]
+                        data_example = {
+                            "command": self.command_repr(derivation.words()),
+                            "meaning": self.command_repr(self.meaning_command(derivation.words())),
+                            "derivation": self.derivation_repr(derivation),
+                            "situation": situation.to_representation(),
+                            "target_commands": "",
+                            "verb_in_command": "",
+                            "manner": self._vocabulary.translate_word(adverb),
+                            "referred_target": ' '.join([self._vocabulary.translate_word(target_predicate["size"]),
+                                                         self._vocabulary.translate_word(target_predicate["color"]),
+                                                         self._vocabulary.translate_word(target_predicate["noun"])])
+                        }
+                        all_data.append(data_example)
+                        example_count += 1
+                        self._world.clear_situation()
+
+        # restore situation
+        self.initialize_world(current_situation, mission=current_mission)
+        return all_data
+
     def assign_splits(self, target_size: str, target_color: str, target_shape: str, verb_in_command: str,
                       direction_to_target: str, referred_target: dict, manner: str):
         splits = []

@@ -1,12 +1,14 @@
 from collections import namedtuple
-from typing import List, Union, Set, NewType
+from typing import List, Union, Set, NewType, Tuple
 from copy import deepcopy
 import random
 import itertools
+import pronounceable
 
 from GroundedScan.world import Direction, DIR_TO_INT, NORTH, SOUTH, WEST, EAST
-from GroundedScan.world import Position, DIR_TO_VEC, INT_TO_DIR, Situation
+from GroundedScan.world import Position, DIR_TO_VEC, INT_TO_DIR
 from GroundedScan.gym_minigrid.minigrid import Grid
+from GroundedScan.dataset import GroundedScan
 
 
 Nonterminal = namedtuple("Nonterminal", "name")
@@ -87,7 +89,7 @@ class Node(object):
 
 
 class Sequence(object):
-    """A sequence of L-System symbols implemented as a linked list."""
+    """A sequence of L-System symbols implemented as a doubly linked list."""
 
     def __init__(self):
         self._sequence_start = None
@@ -111,12 +113,14 @@ class Sequence(object):
             self.append(symbol)
 
     def unset_replaced(self):
+        """Loop over the entire sequence and set every node to .is_replaced = False"""
         current_node = self._sequence_start
         while current_node:
             current_node.unset_replaced()
             current_node = current_node.get_next()
 
     def iterate(self):
+        """Loop over the linked list from start to finish."""
         current_node = self._sequence_start
         while current_node:
             node = current_node
@@ -125,7 +129,8 @@ class Sequence(object):
 
     def replace_node(self, current_node: Node,
                      replace_with: Symbol) -> Node:
-        """Replaces the `current_node` with `replace_with` in the LL."""
+        """Replaces the `current_node` with `replace_with` in the LL
+        returns the one that follows it."""
         new_node = Node(value=replace_with)
         new_node.set_replaced()
         previous_node = current_node.get_previous()
@@ -143,6 +148,7 @@ class Sequence(object):
         return next_node
 
     def delete_node(self, current_node: Node):
+        """Deletes the current node and returns the one that follows it in the LL."""
         previous_node = current_node.get_previous()
         next_node = current_node.get_next()
         if current_node == self._sequence_start:
@@ -164,7 +170,8 @@ class Sequence(object):
 
     def insert_node(self, current_node: Node,
                     insert_node: Symbol):
-        """Inserts `insert_node` before `current_node` in the LL."""
+        """Inserts `insert_node` before `current_node` in the LL, returns
+        current_node."""
         new_node = Node(value=insert_node)
         new_node.set_replaced()
 
@@ -216,6 +223,7 @@ class Sequence(object):
         return self._sequence_end
 
     def get_gscan_actions(self) -> List[str]:
+        """Convert the symbol names to the commands in gSCAN."""
         gscan_actions = []
         for i, node in enumerate(self.iterate()):
             action = node.get().name.lower()
@@ -229,7 +237,8 @@ class Sequence(object):
     def __len__(self):
         return self._sequence_size
 
-    def __eq__(self, sequence):
+    def __eq__(self, sequence: "Sequence"):
+        """Check whether the `sequence` passed is equivalent."""
         if len(self) != len(sequence):
             return False
         for symbol_1, symbol_2 in zip(self.iterate(), sequence.iterate()):
@@ -238,7 +247,8 @@ class Sequence(object):
         return True
 
     def __repr__(self):
-        output_str = " ".join(s.get().name for s in self.iterate() if s.get().name != "EMPTY")
+        output_str = " ".join(s.get().name for s in self.iterate()
+                              if s.get().name != "EMPTY")
         return output_str
 
 
@@ -247,6 +257,7 @@ class Lhs(Sequence):
     Left-hand-side used for an L-system rule.
     Can be made unconditional or conditional rule.
     E.g., W -> A W (W lhs), or {A}A A{A} -> TL TL ({A}A A{A} lhs).
+    The latter is conditional.
     """
 
     def __init__(self, symbols: List[Symbol]):
@@ -352,6 +363,10 @@ class CLRule(LSystemRule):
     """
     A conditional rewrite rule.
     E.g., {W}W{W} -> WW
+    A conditional rule means that
+    the full LHS (in the above case W W W) must be found in a sequence,
+    but only the non-conditional part will actually be
+    replaced by the RHS (in the above case W).
     """
 
     def __init__(self, lhs: Lhs, rhs: Rhs,
@@ -408,7 +423,6 @@ class MetaGrammar(object):
         self._nonmovement_first_person_rules = {}
 
         self.add_rules()
-        print()
 
     def get_movement_rewrite_rules(self):
         return self._movement_rewrite_rules.copy()
@@ -656,27 +670,6 @@ class LSystem(object):
             return True
         else:
             return False
-
-    def __iter__(self):
-        if not self._finished:
-            raise ValueError(
-                "Trying to iterate over an unfinished L-System."
-                " Call .finish_l_system()")
-        self._current_rule_ptr = 0
-        self._current_terminal_ptr = 0
-        return self
-
-    def __next__(self):
-        if self._current_rule_ptr < len(self._rules_in_order):
-            next_rule = self._rules_in_order[self._current_rule_ptr]
-            self._current_rule_ptr += 1
-            return next_rule, False
-        elif self._current_terminal_ptr < len(self._terminal_rules_in_order):
-            next_rule = self._terminal_rules_in_order[self._current_terminal_ptr]
-            self._current_terminal_ptr += 1
-            return next_rule, True
-        else:
-            raise StopIteration
 
     def __repr__(self):
         if not self._finished:
@@ -1026,190 +1019,6 @@ def get_num_pull_actions(last_move_direction: Direction, target_position: Positi
     return num_actions
 
 
-class World(object):
-
-    def __init__(self, num_adverbs: int, seed: int):
-        random.seed(seed)
-        self.meta_grammar = MetaGrammar()
-        self.functions = MetaGrammarFunctions()
-
-    def get_rules(self, type: str):
-        if type == "movement_rewrite":
-            return self.meta_grammar.get_movement_rewrite_rules()
-        elif type == "movement":
-            return self.meta_grammar.get_movement_rules()
-        elif type == "nonmovement_direction":
-            return self.meta_grammar.get_nonmovement_direction_rules()
-        elif type == "nonmovement_first_person":
-            return self.meta_grammar.get_nonmovement_first_person_rules()
-        else:
-            raise ValueError("Unknown type {}".format(type))
-
-    def sample_adverb(self):
-        # Timing 0,1,2 work on direction sequences (like while zigzagging and while spinning)
-        # Timing 1 doesn't exist in gSCAN (applied to directions but not to push/pull)
-        # Timing 3 works on first-person sequences (like cautiously and hesitantly)
-        application_timing_options = [0, 1, 2, 3]
-        sampled_timing = random.sample(application_timing_options)
-        pass
-
-    def generate_all_adverbs(self, type: str):
-        rules = self.get_rules(type)
-        rule_list = list(rules.values())
-
-        # Make sure not adding the rule is represented in the choices.
-        nonterminal_set = set()
-        all_nonterminal_rules = []
-        new_rule_list = []
-        for rules in rule_list:
-            new_rules = []
-            for rule in rules:
-                new_rule = [rule]
-                has_nonterminal = False
-                non_terminal = None
-                for symbol_node in rule.rhs.iterate():
-                    symbol = symbol_node.get()
-                    if isinstance(symbol, Nonterminal):
-                        has_nonterminal = True
-                        non_terminal = symbol
-                        if symbol not in nonterminal_set:
-                            nonterminal_set.add(symbol)
-                            nonterminal_rules = self.meta_grammar.rules[symbol.name]
-                            all_nonterminal_rules.append(list(nonterminal_rules.values()))
-                new_rule.append(has_nonterminal)
-                new_rule.append(non_terminal)
-                new_rules.append(new_rule)
-            new_rules.append([None, False, None])
-            rules.append([None, False, None])
-            new_rule_list.append(new_rules)
-
-        # TODO: hier gebleven
-        all_l_systems_combinations = itertools.product(*new_rule_list)
-        all_l_systems = []
-        for combinations in all_l_systems_combinations:
-            has_nonterminals = set([has_nonterminal for _, has_nonterminal, _ in combinations])
-            if True in has_nonterminals:
-                nonterminals = set([nonterminal for _, _, nonterminal in combinations])
-                for nt in nonterminals:
-                    if nt:
-                        nt_rules = self.meta_grammar.rules[nt.name]
-                        for nt_rule in nt_rules.values():
-                            new_combinations = list(deepcopy(combinations))
-                            new_combinations.append([nt_rule, False, None])
-                            adverb_l_system = LSystem()
-                            for rule_repr, has_nonterminal, nt in new_combinations:
-                                if rule_repr:
-                                    rule = self.meta_grammar.get_rule(lhs_str=str(rule_repr.lhs),
-                                                                      rhs_str=str(rule_repr.rhs))
-                                    terminal_rule = not has_nonterminal
-                                    adverb_l_system.add_rule(rule, terminal_rule=terminal_rule)
-                            adverb_l_system.finish_l_system()
-                            all_l_systems.append(adverb_l_system)
-            else:
-                adverb_l_system = LSystem()
-                for rule_repr, has_nonterminal, nt in combinations:
-                    if rule_repr:
-                        rule = self.meta_grammar.get_rule(lhs_str=str(rule_repr.lhs),
-                                                          rhs_str=str(rule_repr.rhs))
-                        adverb_l_system.add_rule(rule)
-                        # for symbol in rule_repr.rhs.iterate():
-                        #     if symbol in self.meta_grammar.rules.keys():
-                        #         potential_rules = self.meta_grammar.rules[symbol.name]
-                        #         for
-                adverb_l_system.finish_l_system()
-                all_l_systems.append(adverb_l_system)
-        return all_l_systems
-
-    def planner(self, start_position: Position, end_position: Position) -> Sequence:
-        planned_sequence = simulate_planner(start_position, end_position)
-        return planned_sequence
-
-    def apply_adverb(self, adverb: LSystem, sequence: Sequence,
-                     recursion_depth: int) -> Sequence:
-        apply_lsystem(sequence, adverb,
-                      recursion=0, max_recursion=recursion_depth)
-        return sequence
-
-    def remove_out_of_grid(self, direction_sequence: Sequence,
-                           grid_size: int, start_position: Position):
-        start_pos = (start_position.column, start_position.row)
-        current_pos = start_pos
-        to_delete = []
-        direction_node = direction_sequence.get_start()
-        while direction_node:
-            symbol = direction_node.get()
-            if symbol in SYMBOL_CONVERT.keys():
-                direction = SYMBOL_CONVERT[symbol]
-                if direction in to_delete:
-                    direction_node = direction_sequence.delete_node(direction_node)
-                    to_delete.remove(direction)
-                else:
-                    next_pos = current_pos + DIR_TO_VEC[DIR_TO_INT[direction]]
-                    next_col, next_row = next_pos
-                    if not 0 <= next_col <= grid_size - 1 or not 0 <= next_row <= grid_size - 1:
-                        opposite_direction = GET_OPPOSITE_DIR[direction]
-                        to_delete.append(opposite_direction)
-                        direction_node = direction_sequence.delete_node(direction_node)
-                    else:
-                        current_pos = next_pos
-                        direction_node = direction_node.get_next()
-            else:
-                direction_node = direction_node.get_next()
-
-    def reject_first_person_adverb(self, l_system: LSystem) -> bool:
-        start_direction = EAST
-        current_direction = start_direction
-        end_directions = set()
-        for rule in l_system.nonterminal_rules():
-            rhs = rule.rhs
-            current_direction = start_direction
-            for symbol_node in rhs.iterate():
-                symbol = symbol_node.get()
-                if self.functions.is_turn(symbol.name):
-                    current_direction = self.functions.new_dir(current_direction,
-                                                               symbol.name)
-            end_directions.add(current_direction)
-        if len(end_directions) == 0:
-            return False
-        elif len(end_directions) > 1:
-            return True
-        elif start_direction == end_directions.pop():
-            return False
-        else:
-            return True
-
-    def generate_example(self, start_position: Position,
-                         start_direction: int, end_position: Position,
-                         manner: LSystem, recursion_depth_system: int,
-                         recursion_depth_sequence: int,
-                         grid_size: int, type_adverb: str) -> List[str]:
-        start_to_end_sequence = self.planner(start_position, end_position)
-        start_direction = INT_TO_DIR[start_direction]
-        if recursion_depth_system >= 0:
-            manner = apply_recursion(manner, recursion_depth_system)
-        if type_adverb != "nonmovement_first_person":
-            start_to_end_sequence = self.apply_adverb(manner,
-                                                      start_to_end_sequence,
-                                                      recursion_depth_sequence)
-        self.remove_out_of_grid(start_to_end_sequence,
-                                grid_size,
-                                start_position)
-
-        action_sequence = convert_sequence_to_actions(start_to_end_sequence,
-                                                      start_direction)
-        if type_adverb == "nonmovement_first_person":
-            reject_lsystem = self.reject_first_person_adverb(manner)
-            if reject_lsystem:
-                return action_sequence.get_gscan_actions(), True
-            action_sequence = self.apply_adverb(manner,
-                                                action_sequence,
-                                                recursion_depth_sequence)
-        return action_sequence.get_gscan_actions(), False
-
-    def sample_l_system(self):
-        pass
-
-
 class Gscan(object):
 
     def __init__(self):
@@ -1347,3 +1156,243 @@ class Gscan(object):
         for _ in range(num_pull):
             sequence.append(Pull)
         return sequence
+
+
+class AdverbWorld(object):
+    """
+    TODO: explain type adverbs
+    """
+
+    def __init__(self, seed: int):
+        random.seed(seed)
+        self._meta_grammar = MetaGrammar()
+        self._functions = MetaGrammarFunctions()
+        self._all_adverbs = {
+            "movement_rewrite": self.generate_all_adverbs("movement_rewrite"),
+            "movement": self.generate_all_adverbs("movement"),
+            "nonmovement_direction": self.generate_all_adverbs("nonmovement_direction"),
+            "nonmovement_first_person": self.generate_all_adverbs(
+                    "nonmovement_first_person")
+        }
+        self._gscan_programs = Gscan()
+        self._gscan_dataset = None
+        self._intransitive_verbs = ["walk"]
+        self._transitive_verbs = ["push", "pull"]
+        self._nouns = ["circle", "cylinder", "square"]
+        self._color_adjectives = ["red", "blue", "green", "yellow"]
+        self._size_adjectives = ["big", "small"]
+        self._possible_splits = ["train", "dev", "test", "adverb_gen"]
+        self._adverbs = ["cautiously", "while zigzagging", "while spinning",
+                         "hesitantly"]
+
+    def initialize_gscan(self, adverbs: List[str], grid_size: int,
+                         save_directory: str):
+        self._gscan_dataset = GroundedScan(
+            intransitive_verbs=self._intransitive_verbs,
+            transitive_verbs=self._transitive_verbs,
+            nouns=self._nouns,
+            color_adjectives=self._color_adjectives,
+            size_adjectives=self._size_adjectives,
+            adverbs=self._adverbs + adverbs,
+            type_grammar="adverb",
+            sample_vocabulary="default",
+            percentage_train=0.8,
+            min_object_size=1, max_object_size=4,
+            grid_size=grid_size, save_directory=save_directory)
+
+    def generate_adverb_challenge(self, num_training_adverbs: int,
+                                  num_train_examples_per_train_adverb: int,
+                                  num_testing_adverbs: int,
+                                  num_train_examples_per_test_adverb: int,
+                                  grid_size: int,
+                                  save_directory: str):
+        """
+
+        :param num_training_adverbs:
+        :param num_train_examples_per_train_adverb:
+        :param num_testing_adverbs:
+        :param num_test_examples_per_test_adverb:
+        :param num_train_examples_per_test_adverb:
+        :return:
+        """
+        adverbs = ["while " + pronounceable.generate_word() + "ing" for _ in range(num_training_adverbs + num_testing_adverbs)]
+        training_adverbs = adverbs[:num_training_adverbs]
+        testing_adverbs = adverbs[num_training_adverbs:]
+        self.initialize_gscan(adverbs, grid_size, save_directory)
+        data_without_targets = self._gscan_dataset.get_adverb_world_states(
+            max_examples=None, num_resampling=10,
+            other_objects_sample_percentage=0.5,
+            min_other_objects=0
+        )
+        print()
+
+    def get_rules(self, type_adverb: str):
+        if type_adverb == "movement_rewrite":
+            return self._meta_grammar.get_movement_rewrite_rules()
+        elif type_adverb == "movement":
+            return self._meta_grammar.get_movement_rules()
+        elif type_adverb == "nonmovement_direction":
+            return self._meta_grammar.get_nonmovement_direction_rules()
+        elif type_adverb == "nonmovement_first_person":
+            return self._meta_grammar.get_nonmovement_first_person_rules()
+        else:
+            raise ValueError("Unknown type {}".format(type_adverb))
+
+    def sample_adverb(self):
+        raise NotImplementedError()
+
+    def construct_lsystem(self, rule_combinations) -> LSystem:
+        adverb_l_system = LSystem()
+        for rule_repr, has_nonterminal, nt in rule_combinations:
+            if rule_repr:
+                rule = self._meta_grammar.get_rule(lhs_str=str(rule_repr.lhs),
+                                                  rhs_str=str(rule_repr.rhs))
+                terminal_rule = not has_nonterminal
+                adverb_l_system.add_rule(rule, terminal_rule=terminal_rule)
+        adverb_l_system.finish_l_system()
+        return adverb_l_system
+
+    def generate_all_adverbs(self, type_adverb: str) -> List[LSystem]:
+        """
+        Takes all rules of the type of adverb to generate, makes all possible combinations
+        of L-systems that can be made with them: for every unique LHS, pick a rule (with
+        the option of *not* adding a rule with that LHS).  Additionally, if a chosen rule
+        has a nonterminal in the RHS, this gives extra potential L-systems to be generated.
+        :param type_adverb: the string determining the type of adverb to generate
+                     (see get_rules() for options and docstring for explanation)
+        :return: A list of all generated L-systems.
+        """
+        # Get rules from meta-grammar that can be used to generate adverbs of this type.
+        rules = self.get_rules(type_adverb)
+        rule_list = list(rules.values())
+
+        # Make lists with rules grouped together with the same LHS
+        all_rules_per_lhs = []
+        for rules in rule_list:
+            all_rules_lhs = []
+            for rule in rules:
+                # Keep track of which rules have a nonterminal in the RHS
+                has_nonterminal, non_terminal = False, None
+                for symbol_node in rule.rhs.iterate():
+                    symbol = symbol_node.get()
+                    if isinstance(symbol, Nonterminal):
+                        has_nonterminal = True
+                        non_terminal = symbol
+                all_rules_lhs.append([rule, has_nonterminal, non_terminal])
+
+            # Make sure *not* adding the rule is represented in the choices.
+            all_rules_lhs.append([None, False, None])
+            all_rules_per_lhs.append(all_rules_lhs)
+
+        # Generate all possible combinations rules.
+        all_l_systems_combinations = itertools.product(*all_rules_per_lhs)
+        all_l_systems = []
+        for combinations in all_l_systems_combinations:
+
+            # For all nonterminals in RHSs of rules, generate all possible combinations
+            # of rules with that NT in the LHS.
+            has_nonterminals = set([has_nonterminal for _, has_nonterminal, _ in combinations])
+            if True in has_nonterminals:
+                nonterminals = set([nonterminal for _, _, nonterminal in combinations])
+                for nt in nonterminals:
+                    if nt:
+                        nt_rules = self._meta_grammar.rules[nt.name]
+                        for nt_rule in nt_rules.values():
+                            new_combinations = list(deepcopy(combinations))
+                            new_combinations.append([nt_rule, False, None])
+                            adverb_l_system = self.construct_lsystem(new_combinations)
+                            all_l_systems.append(adverb_l_system)
+            # If not, just make the current L-system.
+            else:
+                adverb_l_system = self.construct_lsystem(combinations)
+                all_l_systems.append(adverb_l_system)
+        return all_l_systems
+
+    def planner(self, start_position: Position, end_position: Position) -> Sequence:
+        planned_sequence = simulate_planner(start_position, end_position)
+        return planned_sequence
+
+    def apply_adverb(self, adverb: LSystem, sequence: Sequence,
+                     recursion_depth: int) -> Sequence:
+        apply_lsystem(sequence, adverb,
+                      recursion=0, max_recursion=recursion_depth)
+        return sequence
+
+    def remove_out_of_grid(self, direction_sequence: Sequence,
+                           grid_size: int, start_position: Position):
+        start_pos = (start_position.column, start_position.row)
+        current_pos = start_pos
+        to_delete = []
+        direction_node = direction_sequence.get_start()
+        while direction_node:
+            symbol = direction_node.get()
+            if symbol in SYMBOL_CONVERT.keys():
+                direction = SYMBOL_CONVERT[symbol]
+                if direction in to_delete:
+                    direction_node = direction_sequence.delete_node(direction_node)
+                    to_delete.remove(direction)
+                else:
+                    next_pos = current_pos + DIR_TO_VEC[DIR_TO_INT[direction]]
+                    next_col, next_row = next_pos
+                    if not 0 <= next_col <= grid_size - 1 or not 0 <= next_row <= grid_size - 1:
+                        opposite_direction = GET_OPPOSITE_DIR[direction]
+                        to_delete.append(opposite_direction)
+                        direction_node = direction_sequence.delete_node(direction_node)
+                    else:
+                        current_pos = next_pos
+                        direction_node = direction_node.get_next()
+            else:
+                direction_node = direction_node.get_next()
+
+    def reject_first_person_adverb(self, l_system: LSystem) -> bool:
+        start_direction = EAST
+        end_directions = set()
+        for rule in l_system.nonterminal_rules():
+            rhs = rule.rhs
+            current_direction = start_direction
+            for symbol_node in rhs.iterate():
+                symbol = symbol_node.get()
+                if self._functions.is_turn(symbol.name):
+                    current_direction = self._functions.new_dir(current_direction,
+                                                               symbol.name)
+            end_directions.add(current_direction)
+        if len(end_directions) == 0:
+            return False
+        elif len(end_directions) > 1:
+            return True
+        elif start_direction == end_directions.pop():
+            return False
+        else:
+            return True
+
+    def generate_example(self, start_position: Position,
+                         start_direction: int, end_position: Position,
+                         manner: LSystem, recursion_depth_system: int,
+                         recursion_depth_sequence: int,
+                         grid_size: int, type_adverb: str) -> Tuple[List[str], bool]:
+        start_to_end_sequence = self.planner(start_position, end_position)
+        start_direction = INT_TO_DIR[start_direction]
+        if recursion_depth_system >= 0:
+            manner = apply_recursion(manner, recursion_depth_system)
+        if type_adverb != "nonmovement_first_person":
+            start_to_end_sequence = self.apply_adverb(manner,
+                                                      start_to_end_sequence,
+                                                      recursion_depth_sequence)
+        self.remove_out_of_grid(start_to_end_sequence,
+                                grid_size,
+                                start_position)
+
+        action_sequence = convert_sequence_to_actions(start_to_end_sequence,
+                                                      start_direction)
+        if type_adverb == "nonmovement_first_person":
+            reject_lsystem = self.reject_first_person_adverb(manner)
+            if reject_lsystem:
+                return action_sequence.get_gscan_actions(), True
+            action_sequence = self.apply_adverb(manner,
+                                                action_sequence,
+                                                recursion_depth_sequence)
+        return action_sequence.get_gscan_actions(), False
+
+    def sample_l_system(self):
+        pass
+
