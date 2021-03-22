@@ -115,7 +115,7 @@ def test_save_and_load_dataset(dataset):
             example_two["input_command"]), "test_save_and_load_dataset FAILED"
         assert dataset.command_repr(example_one["target_command"]) == test_grounded_scan.command_repr(
             example_two["target_command"]), "test_save_and_load_dataset FAILED"
-        assert np.array_equatest_save_and_load_datasetl(example_one["situation_image"], example_two["situation_image"]),\
+        assert np.array_equal(example_one["situation_image"], example_two["situation_image"]),\
             " FAILED"
         assert dataset.command_repr(example_one["input_meaning"]) == test_grounded_scan.command_repr(
             example_two["input_meaning"]), "test_save_and_load_dataset FAILED"
@@ -1299,11 +1299,17 @@ def test_gscan_examples(dataset):
     # TODO: how to make sure push/pull/walk and all adverbs are tested
     logger.info("test_gscan_examples loading {} and testing {} examples. Might take a while.".format(num_generate_examples,
                                                                                                      num_test_examples))
-    dataset.get_data_pairs(max_examples=num_generate_examples)
+    dataset.get_data_pairs(max_examples=num_generate_examples, with_nonterminal="VV_trans")
     indices = [i for i in range(len(dataset._data_pairs["train"]))]
     random.shuffle(indices)
     gscan = dsl.Gscan()
     verb_adverb = {}
+    adverb_types = {
+        "while zigzagging": "movement_rewrite",
+        "while spinning": "nonmovement_direction",
+        "cautiously": "nonmovement_first_person",
+        "hesitantly": "nonmovement_first_person"
+    }
     num_examples_tested = 0
     for example_idx in indices[:num_test_examples]:
         example = dataset._data_pairs["train"][example_idx]
@@ -1336,13 +1342,20 @@ def test_gscan_examples(dataset):
         grid = dataset._world.grid
         start_direction = example["situation"]["agent_direction"]
         expected_target_commands = example["target_commands"]
-        actual_target_commands = gscan.parse_gscan_example(verb_in_command,
-                                                           start_position,
-                                                           start_direction,
-                                                           target_position,
-                                                           manner,
-                                                           grid,
-                                                           heavy)
+        if manner == "while zigzagging":
+            recursion_depth = abs(target_position.column - start_position.column) - 1
+        else:
+            recursion_depth = 1
+        output = gscan.parse_example(verb_in_command=verb_in_command,
+                                           start_position=start_position,
+                                           start_direction=start_direction,
+                                           end_position=target_position,
+                                           adverb=gscan.get_gscan_adverb(manner),
+                                           adverb_type=adverb_types[manner],
+                                           grid=grid,
+                                           heavy=heavy,
+                                           recursion=recursion_depth)
+        actual_target_commands = output["target_commands"]
         actual_target_commands = ",".join(actual_target_commands)
         assert expected_target_commands == actual_target_commands, \
             "test_gscan_examples FAILED with verb {}, manner {}," \
@@ -1362,15 +1375,12 @@ def test_adverb_sampling(dataset):
     current_mission = dataset._world.mission
 
     world = dsl.AdverbWorld(seed=1)
+    world.populate_adverbs()
     movement_rewrite_adverbs = world._all_adverbs["movement_rewrite"]
     movement_adverbs = world._all_adverbs["movement"]
     nonmovement_direction_adverbs = world._all_adverbs["nonmovement_direction"]
     nonmovement_first_person_adverbs = world._all_adverbs[
         "nonmovement_first_person"]
-    print("movement_rewrite {}".format(len(movement_rewrite_adverbs)))
-    print("movement_adverbs {}".format(len(movement_adverbs)))
-    print("nonmovement_direction_adverbs {}".format(len(nonmovement_direction_adverbs)))
-    print("nonmovement_first_person_adverbs {}".format(len(nonmovement_first_person_adverbs)))
     all_adverbs = {"nonmovement_direction": nonmovement_direction_adverbs,
                    "movement_adverbs": movement_adverbs,
                    "movement_rewrite": movement_rewrite_adverbs,
@@ -1379,18 +1389,10 @@ def test_adverb_sampling(dataset):
                               lambda cols, rows: cols - 1,
                               lambda cols, rows: rows - 1,
                               lambda cols, rows: cols + rows - 1]
-    other_recursions = [lambda cols, rows: 1,
-                        lambda cols, rows: 2,
-                        lambda cols, rows: 3,
-                        lambda cols, rows: 4]
     zero_recursions = [lambda cols, rows: 1,
                        lambda cols, rows: 1,
                        lambda cols, rows: 1,
                        lambda cols, rows: 1]
-    all_recursions_system = {"nonmovement_direction": other_recursions,
-                             "movement_adverbs": other_recursions,
-                             "movement_rewrite": zero_recursions,
-                             "nonmovement_first_person": other_recursions}
     all_recursions_sequence = {"nonmovement_direction": zero_recursions,
                                "movement_adverbs": zero_recursions,
                                "movement_rewrite": recursions_on_sequence,
@@ -1399,13 +1401,12 @@ def test_adverb_sampling(dataset):
                    "nonmovement_direction",
                    "movement_adverbs",
                    "movement_rewrite"]
+    num_rejected = 0
     for type in adverb_type:
         adverb_list = all_adverbs[type]
-        recursions_system = all_recursions_system[type]
         recursions_sequence = all_recursions_sequence[type]
         adverbs_to_test = random.sample(adverb_list, 10)
-        # adverbs_to_test = adverb_list[:5]
-        to_visualize = random.sample(range(5), 5)
+        to_visualize = random.sample(range(10), 5)
         for i, adverb in enumerate(adverbs_to_test):
             if i in to_visualize:
                 parent_save_dir = "{}_{}".format(type, i)
@@ -1414,8 +1415,8 @@ def test_adverb_sampling(dataset):
                     os.mkdir(save_dir)
                 infile = open(os.path.join(save_dir, "l_system.txt"), "w")
                 infile.write(str(adverb))
-            for recursion_lambda_system, recursion_lambda_sequence in zip(recursions_system, recursions_sequence):
-                for _ in range(1):
+            for recursion_lambda_sequence in recursions_sequence:
+                for _ in range(10):
                     start_direction = random.randint(0, 3)
                     start_row = random.randint(0, dataset._world.grid_size - 1)
                     start_col = random.randint(0, dataset._world.grid_size - 1)
@@ -1423,12 +1424,8 @@ def test_adverb_sampling(dataset):
                     end_col = random.randint(0, dataset._world.grid_size - 1)
                     num_rows = abs(end_row - start_row)
                     num_cols = abs(end_col - start_col)
-                    recursion_system = recursion_lambda_system(num_cols, num_rows)
                     recursion_sequence = recursion_lambda_sequence(num_cols, num_rows)
                     if i in to_visualize:
-                        infile.write("num_cols %d num_rows %d recursion system %d\n" % (num_cols,
-                                                                                 num_rows,
-                                                                                 recursion_system))
                         infile.write("num_cols %d num_rows %d recursion sequence %d\n" % (num_cols,
                                                                                           num_rows,
                                                                                           recursion_sequence))
@@ -1447,14 +1444,15 @@ def test_adverb_sampling(dataset):
                                                       vector=np.array([1, 0, 1]))], carrying=None)
                     # dataset.initialize_world(current_situation, mission=current_mission)
                     sequence, is_rejected = world.generate_example(start_position,
-                                                      start_direction,
-                                                      end_position,
-                                                      adverb,
-                                                      recursion_depth_system=recursion_system,
-                                                      recursion_depth_sequence=recursion_sequence,
-                                                      grid_size=dataset._world.grid_size,
-                                                      type_adverb=type)
+                                                                   start_direction,
+                                                                   end_position,
+                                                                   adverb,
+                                                                   recursion_depth_system=1,
+                                                                   recursion_depth_sequence=recursion_sequence,
+                                                                   grid_size=dataset._world.grid_size,
+                                                                   type_adverb=type)
                     if is_rejected:
+                        num_rejected += 1
                         logger.info("Rejected L-system.")
                         logger.info(str(adverb))
                         if i in to_visualize:
@@ -1473,6 +1471,7 @@ def test_adverb_sampling(dataset):
                     assert end_row == actual_end_row, "Wrong end row for adverb_type {}".format(type)
             if i in to_visualize:
                 infile.close()
+    assert num_rejected == 0, "test_adverb_sampling FAILED. Rejected {} L-systems.".format(num_rejected)
     dataset.initialize_world(current_situation, mission=current_mission)
     end = time.time()
     logger.info("test_adverb_sampling PASSED in {} seconds".format(end - start))
@@ -1564,17 +1563,207 @@ def test_remove_out_of_grid(dataset):
 
 def test_generate_adverb_challenge():
     start = time.time()
+    num_train_examples_per_train_adverb = 300
+    num_train_examples_per_test_adverb = 56
+    adverb_world = dsl.AdverbWorld(seed=1, save_directory=TEST_DIRECTORY)
+    adverb_world.generate_adverb_challenge(num_extra_training_adverbs=10,
+                                           num_train_examples_per_train_adverb=num_train_examples_per_train_adverb,
+                                           num_extra_testing_adverbs=6,
+                                           num_train_examples_per_test_adverb=num_train_examples_per_test_adverb,
+                                           grid_size=6,
+                                           make_dev_set=True)
 
-    adverb_world = dsl.AdverbWorld(seed=1)
-    data = adverb_world.generate_adverb_challenge(num_training_adverbs=20,
-                                                  num_train_examples_per_train_adverb=50,
-                                                  num_testing_adverbs=5,
-                                                  num_train_examples_per_test_adverb=50,
-                                                  grid_size=6,
-                                                  save_directory=TEST_DIRECTORY)
+    save_path = adverb_world.save_adverb_challenge("adverb_challenge.txt")
+
+    num_examples_per_adverb_per_split = {}
+
+    for split, examples in adverb_world._gscan_dataset._data_pairs.items():
+        for example in examples:
+            adverb = example["manner"]
+            verb = example["verb_in_command"]
+            derivation = adverb_world._gscan_dataset.parse_derivation_repr(example["derivation"])
+            situation = Situation.from_representation(example["situation"])
+            old_target_commands, old_demonstration, old_target_action = adverb_world._gscan_dataset.demonstrate_command(
+                derivation, situation)
+            if adverb_world._gscan_dataset._vocabulary.translate_word(adverb) in [
+                "while spinning", "cautiously", "hesitantly", "while zigzagging"]:
+                assert ','.join(old_target_commands) == example["target_commands"]
+            expected_end_location = old_demonstration[-1].agent_pos
+            current_type = adverb_world.get_adverb_type(adverb_world._gscan_dataset._vocabulary.translate_word(adverb))
+            if current_type != "movement" and current_type != "movement_rewrite" or verb == "walk":
+                command = derivation.words()
+                _, _, actual_end_col, actual_end_row = adverb_world._gscan_dataset.demonstrate_target_commands(
+                    command, situation, example["target_commands"].split(","))
+                assert actual_end_col == expected_end_location.column, "Wrong end column in " \
+                                                                       "generate_adverb_world_states."
+                assert actual_end_row == expected_end_location.row, "Wrong end row in " \
+                                                                    "generate_adverb_world_states."
+            if adverb not in num_examples_per_adverb_per_split:
+                num_examples_per_adverb_per_split[adverb] = {}
+            if split not in num_examples_per_adverb_per_split[adverb]:
+                num_examples_per_adverb_per_split[adverb][split] = 0
+            num_examples_per_adverb_per_split[adverb][split] += 1
+
+    held_out_adverbs = adverb_world._heldout_adverbs_str.split(",")
+    held_out_adverbs.append("cautiously")
+    for adverb, occurrences in num_examples_per_adverb_per_split.items():
+        for split, count in occurrences.items():
+            if split == "train" and adverb not in held_out_adverbs:
+                assert count == num_train_examples_per_train_adverb, "Wrong count of adverb %s in split %s: %d" % (
+                    adverb, split, count
+                )
+            elif split == "train" and adverb in held_out_adverbs:
+                assert count == num_train_examples_per_test_adverb, "Wrong count of adverb %s in split %s: %d" % (
+                    adverb, split, count
+                )
+
+    logger.info("Saved adverb challenge at %s" % save_path)
+    adverb_world.save_gscan_statistics(dev_set=True)
+    adverb_world.visualize_gscan_examples()
 
     end = time.time()
     logger.info("test_generate_adverb_challenge PASSED in {} seconds".format(end - start))
+
+
+def test_save_and_load_adverb_challenge():
+    start = time.time()
+
+    adverb_world = dsl.AdverbWorld(seed=1, save_directory=TEST_DIRECTORY)
+    adverb_world.generate_adverb_challenge(num_extra_training_adverbs=10,
+                                           num_train_examples_per_train_adverb=200,
+                                           num_extra_testing_adverbs=3,
+                                           num_train_examples_per_test_adverb=50,
+                                           grid_size=6,
+                                           make_dev_set=True)
+
+    save_path = adverb_world.save_adverb_challenge("adverb_challenge.txt")
+    logger.info("Saved adverb challenge at %s" % save_path)
+    adverb_world.save_gscan_statistics(dev_set=True)
+
+    adverb_world_reloaded = dsl.AdverbWorld.load_adverb_challenge(save_path,
+                                                                  save_directory=TEST_DIRECTORY)
+
+    assert adverb_world._heldout_adverbs_str == adverb_world_reloaded._heldout_adverbs_str, \
+        "test_save_and_load_adverb_challenge FAILED. Reloaded heldout adverbs are different: %s before saving, %s after" % (adverb_world._heldout_adverbs_str,
+                                                                                adverb_world_reloaded._heldout_adverbs_str)
+    assert adverb_world._extra_adverbs_str == adverb_world_reloaded._extra_adverbs_str, \
+        "test_save_and_load_adverb_challenge FAILED. Reloaded extra adverbs are different: %s before saving, %s after" % (adverb_world._extra_adverbs_str,
+                                                                              adverb_world_reloaded._extra_adverbs_str)
+    assert adverb_world.seed == adverb_world_reloaded.seed, "test_save_and_load_adverb_challenge FAILED. Reloaded seed "\
+                                                            "differs from old seed: old seed %d, new seed %d" % (
+        adverb_world.seed, adverb_world_reloaded.seed
+    )
+    for extra_adverb_str, extra_adverb_lsystem_spec in adverb_world._extra_adverbs.items():
+        assert extra_adverb_str in adverb_world_reloaded._extra_adverbs, "test_save_and_load_adverb_challenge FAILED." \
+            "did not find adverb %s in reloaded dataset." % extra_adverb_str
+        extra_adverb_lsystem = extra_adverb_lsystem_spec["program"]
+        old_program = extra_adverb_lsystem.to_representation()
+        new_program = adverb_world_reloaded._extra_adverbs[extra_adverb_str]["program"].to_representation()
+        assert old_program == new_program, "test_save_and_load_adverb_challenge FAILED. L-System differs for adverb %s" % extra_adverb_str
+
+    # Compare gSCAN stats
+    for split, stats in adverb_world._gscan_dataset._data_statistics.items():
+        other_stats = adverb_world_reloaded._gscan_dataset._data_statistics[split]
+        for type_stats, stats in stats.items():
+            other_stats_type = other_stats[type_stats]
+            assert stats == other_stats_type, "test_save_and_load_adverb_challenge FAILED. Compare data stats FAILED."
+
+    # Compare gSCAN examples
+    for split, examples in adverb_world._gscan_dataset._data_pairs.items():
+        other_examples = adverb_world_reloaded._gscan_dataset._data_pairs[split]
+        for example_1, example_2 in zip(examples, other_examples):
+            assert example_1 == example_2, "test_save_and_load_adverb_challenge FAILED. Different examples "\
+                                           " in split %s" % split
+
+    # os.remove(os.path.join(TEST_DIRECTORY, "adverb_challenge.txt"))
+    # os.remove(os.path.join(TEST_DIRECTORY, "dataset.txt"))
+
+    end = time.time()
+    logger.info("test_save_and_load_adverb_challenge PASSED in {} seconds".format(end - start))
+
+
+def test_write_and_load_l_systems():
+    start = time.time()
+
+    adverb_world = dsl.AdverbWorld(seed=1, save_directory=TEST_DIRECTORY)
+    adverb_world.populate_adverbs(max_per_type=1000)
+
+    meta_grammar = dsl.MetaGrammar()
+
+    for adverb_type, adverbs in adverb_world._all_adverbs.items():
+        for adverb in adverbs:
+            start_direction = random.randint(0, 3)
+            start_row = random.randint(0, 10)
+            start_col = random.randint(0, 10)
+            end_row = random.randint(0, 10)
+            end_col = random.randint(0, 10)
+            start_position = dsl.Position(row=start_row, column=start_col)
+            end_position = dsl.Position(row=end_row, column=end_col)
+            if adverb_type == "movement_rewrite":
+                recursion_depth = max(0, abs(end_position.column - start_position.column) - 1)
+            else:
+                recursion_depth = 1
+            before_sequence, _ = adverb_world.generate_example(start_position,
+                                                               start_direction,
+                                                               end_position,
+                                                               adverb,
+                                                               recursion_depth_system=0,
+                                                               recursion_depth_sequence=recursion_depth,
+                                                               grid_size=11,
+                                                               type_adverb=adverb_type)
+            adverb_repr = adverb.to_representation()
+            adverb_after = dsl.LSystem.from_representation(adverb_repr, meta_grammar)
+            after_sequence, _ = adverb_world.generate_example(start_position,
+                                                              start_direction,
+                                                              end_position,
+                                                              adverb_after,
+                                                              recursion_depth_system=0,
+                                                              recursion_depth_sequence=recursion_depth,
+                                                              grid_size=11,
+                                                              type_adverb=adverb_type)
+            assert ";".join(before_sequence) == ";".join(after_sequence), "test_write_and_load_l_systems FAILED "\
+                                                                          "for adverb type %s" % adverb_type
+    end = time.time()
+    logger.info("test_write_and_load_l_systems PASSED in {} seconds".format(end - start))
+
+
+def test_assign_adverbs():
+    start = time.time()
+
+    num_adverbs = 25
+    adverb_world = dsl.AdverbWorld(seed=1, save_directory=TEST_DIRECTORY)
+    adverb_world.populate_adverbs(max_per_type=num_adverbs)
+
+    adverbs = ["adverb_%d" % i for i in range(num_adverbs)]
+    adverb_world.assign_adverb_programs(adverbs)
+    adverb_programs = adverb_world._extra_adverbs
+    all_adverb_programs = []
+    all_adverb_types = []
+    for adverb_str, adverb_spec in adverb_programs.items():
+        type_adverb = adverb_spec["type"]
+        program_adverb = adverb_spec["program"]
+        all_adverb_programs.append(program_adverb)
+        all_adverb_types.append(type_adverb)
+
+    assert len(all_adverb_programs) == num_adverbs, "test_assign_adverbs FAILED. Assigned %d programs but needed "\
+                                                    " %d programs" % (
+        len(all_adverb_programs), num_adverbs
+    )
+    # Check unique
+    for i, adverb_program in enumerate(all_adverb_programs):
+        for j, other_adverb_program in enumerate(all_adverb_programs):
+            if i == j:
+                continue
+            assert adverb_program != other_adverb_program, "test_assign_adverbs FAILED. "\
+                                                           "Overlap in assigned adverb programs."
+    gscan_adverbs = ["cautiously", "while zigzagging", "while spinning", "hesitantly"]
+    gscan_programs = [adverb_world.get_adverb_program(gscan_adv) for gscan_adv in gscan_adverbs]
+    for gscan_adverb in gscan_programs:
+        assert gscan_adverb not in all_adverb_programs, "test_assign_adverbs FAILED. gSCAN adverb %s found in assigned"\
+                                                        " programs." % gscan_adverb
+
+    end = time.time()
+    logger.info("test_assign_adverbs PASSED in {} seconds".format(end - start))
 
 
 def run_all_tests():
@@ -1641,5 +1830,8 @@ def run_all_tests():
     # test_gscan_examples(TEST_DATASET_2)
     # test_adverb_sampling(TEST_DATASET_2)
     # test_remove_out_of_grid(TEST_DATASET_2)
+    # test_save_and_load_adverb_challenge()
     test_generate_adverb_challenge()
+    test_assign_adverbs()
+    test_write_and_load_l_systems()
     # shutil.rmtree(TEST_DIRECTORY)

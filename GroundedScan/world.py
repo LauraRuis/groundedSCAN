@@ -20,7 +20,6 @@ from GroundedScan.helpers import one_hot
 from GroundedScan.helpers import generate_possible_object_names
 from GroundedScan.helpers import numpy_array_to_image
 
-
 SemType = namedtuple("SemType", "name")
 Position = namedtuple("Position", "column row")
 Object = namedtuple("Object", "size color shape")
@@ -718,6 +717,7 @@ class World(MiniGridEnv):
     def push_or_pull_object(self, direction: Direction, primitive_command: str):
         current_object = self.grid.get(*self.agent_pos)
         if not current_object:
+            raise ValueError("Trying to {} object where there is none." % primitive_command)
             self._observed_commands.append(primitive_command)
             self._observed_situations.append(self.get_current_situation())
         else:
@@ -733,7 +733,6 @@ class World(MiniGridEnv):
                             self.take_step_in_direction(direction, primitive_command)
                         else:
                             self.pull(position=new_position)
-
             else:
                 # Pushing an object that won't move just yet (because it's heavy).
                 self._observed_commands.append(primitive_command)
@@ -807,7 +806,11 @@ class World(MiniGridEnv):
             self.take_step_in_direction(direction=DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]],
                                         primitive_command=verb)
         elif verb == "push" or verb == "pull":
-            self.push_or_pull_object(direction=DIR_STR_TO_DIR[INT_TO_DIR[self.agent_dir].name[0]],
+            if verb == "push":
+                direction = INT_TO_DIR[self.agent_dir]
+            else:
+                direction = INT_TO_DIR[(self.agent_dir + 2) % 4]
+            self.push_or_pull_object(direction=direction,
                                      primitive_command=verb)
         elif verb == "stay":
             self.hesitate()

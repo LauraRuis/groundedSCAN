@@ -25,7 +25,9 @@ class Vocabulary(object):
         self._nouns = nouns
         self._color_adjectives = color_adjectives
         self._size_adjectives = size_adjectives
-        assert len(all_words) == len(all_unique_words), "Overlapping vocabulary (the same string used twice)."
+        assert len(all_words) == len(all_unique_words), "Overlapping vocabulary (the same string used twice,"\
+                                                        "most likely caused by pronounceable generating the same random"\
+                                                        " word twice). Just re-run the same code."
         if len(color_adjectives) > 0 and len(size_adjectives) > 0:
             self._adjectives = list(self._color_adjectives.values()) + list(self._size_adjectives.values())
         elif len(color_adjectives) > 0:

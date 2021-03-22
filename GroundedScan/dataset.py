@@ -14,6 +14,7 @@ import itertools
 import logging
 from copy import deepcopy
 from xlwt import Workbook
+from collections.abc import Callable
 
 logger = logging.getLogger("GroundedScan")
 
@@ -30,8 +31,11 @@ class GroundedScan(object):
                  size_adjectives: Union[Dict[str, str], List[str], int],
                  grid_size: int, min_object_size: int,
                  max_object_size: int, type_grammar: str, sample_vocabulary: str, percentage_train: float,
-                 percentage_dev=0.01,
-                 save_directory=os.getcwd(), max_recursion=1):
+                 percentage_dev=0.01, adverb_splits=None,
+                 save_directory=os.getcwd(), max_recursion=1, seed=123):
+        self.seed = seed
+        np.random.seed(seed)
+        random.seed(seed)
         if sample_vocabulary == 'sample':
             needed_type = int
         elif sample_vocabulary == 'load':
@@ -92,6 +96,10 @@ class GroundedScan(object):
         self._percentage_dev = percentage_dev
         self._possible_splits = ["train", "dev", "test", "visual", "situational_1", "situational_2", "contextual",
                                  "adverb_1", "adverb_2", "visual_easier", "target_lengths"]
+        self._adverb_splits = adverb_splits
+        if adverb_splits:
+            for adverb_split in adverb_splits:
+                self._possible_splits += ["extra_" + adverb_split]
         self._data_pairs = self.get_empty_split_dict()
         self._template_identifiers = self.get_empty_split_dict()
         self._examples_to_visualize = []
@@ -132,12 +140,14 @@ class GroundedScan(object):
             template_identifier = self._template_identifiers[split][example_idx]
             self._data_pairs["train"].append(example)
             self._template_identifiers["train"].append(template_identifier)
+            self._data_pairs["dev"].append(example)
+            self._template_identifiers["dev"].append(template_identifier)
             self._k_shot_examples_in_train[split] += 1
         for example_idx in sorted(k_random_indices, reverse=True):
             del self._data_pairs[split][example_idx]
             del self._template_identifiers[split][example_idx]
 
-    def get_examples_with_image(self, split="train", simple_situation_representation=False) -> dict:
+    def get_examples_with_image(self, split="train", simple_situation_representation=False, adverb_inputs=False) -> dict:
         """
         Get data pairs with images in the form of np.ndarray's with RGB values or with 1 pixel per grid cell
         (see encode in class Grid of minigrid.py for details on what such representation looks like).
@@ -160,10 +170,23 @@ class GroundedScan(object):
             else:
                 situation_image = self._world.get_current_situation_image()
             target_commands = self.parse_command_repr(example["target_commands"])
-            yield {"input_command": command, "input_meaning": meaning,
-                   "derivation_representation": example.get("derivation"),
-                   "situation_image": situation_image, "situation_representation": example["situation"],
-                   "target_command": target_commands}
+            if not adverb_inputs:
+                yield {"input_command": command, "input_meaning": meaning,
+                       "derivation_representation": example.get("derivation"),
+                       "situation_image": situation_image, "situation_representation": example["situation"],
+                       "target_command": target_commands}
+            else:
+                adverb_input = self.parse_command_repr(example["planner_input"])
+                adverb_target = self.parse_command_repr(example["adverb_target"])
+                type_adverb = example["type_adverb"]
+                adverb = example["manner"]
+                verb_in_command = example["verb_in_command"]
+                yield {"input_command": command, "input_meaning": meaning,
+                       "derivation_representation": example.get("derivation"),
+                       "situation_image": situation_image, "situation_representation": example["situation"],
+                       "target_command": target_commands, "adverb_input": adverb_input,
+                       "adverb_target": adverb_target, "type_adverb": type_adverb, "adverb": adverb,
+                       "verb_in_command": verb_in_command}
 
     @property
     def situation_image_dimension(self):
@@ -200,6 +223,20 @@ class GroundedScan(object):
             del self._template_identifiers[split][i_to_delete]
         return equivalent_examples
 
+    def discard_excess_examples_train(self, max_examples: int):
+        manner_count = {}
+        to_delete = []
+        for i, example in enumerate(self._data_pairs["train"]):
+            manner = example["manner"]
+            if manner not in manner_count:
+                manner_count[manner] = 0
+            manner_count[manner] += 1
+            if manner_count[manner] > max_examples:
+                to_delete.append(i)
+        for i_to_delete in sorted(to_delete, reverse=True):
+            del self._data_pairs["train"][i_to_delete]
+            del self._template_identifiers["train"][i_to_delete]
+
     def has_equivalent_example(self, example: dict, template_identifier: int, split="train"):
         """Go over the matching templates in the specified split and compare for equivalent with the passed example."""
         for i, example_1 in enumerate(self._data_pairs[split]):
@@ -233,6 +270,32 @@ class GroundedScan(object):
             self._examples_to_visualize.append(example)
         return example
 
+    def fill_adverb_example(self, command: List[str], derivation: Derivation, situation: Situation,
+                            verb_in_command: str, target_predicate: dict, visualize: bool, adverb: str,
+                            splits: List[str], planner_input: List[str], adverb_target: List[str],
+                            target_commands: List[str], type_adverb: str):
+        """Add an example to the list of examples for the specified split."""
+        example = {
+            "command": self.command_repr(command),
+            "meaning": self.command_repr(self.meaning_command(command)),
+            "derivation": self.derivation_repr(derivation),
+            "situation": situation.to_representation(),
+            "planner_input": self.command_repr(planner_input),
+            "adverb_target": self.command_repr(adverb_target),
+            "target_commands": self.command_repr(target_commands),
+            "type_adverb": type_adverb,
+            "verb_in_command": self._vocabulary.translate_word(verb_in_command),
+            "manner": self._vocabulary.translate_word(adverb),
+            "referred_target": ' '.join([self._vocabulary.translate_word(target_predicate["size"]),
+                                         self._vocabulary.translate_word(target_predicate["color"]),
+                                         self._vocabulary.translate_word(target_predicate["noun"])])
+        }
+        for split in splits:
+            self._data_pairs[split].append(example)
+        if visualize:
+            self._examples_to_visualize.append(example)
+        return example
+
     @staticmethod
     def compare_examples(example_1: dict, example_2: dict) -> bool:
         """An example is regarded the same if the command, situation, target commands are the same."""
@@ -247,7 +310,7 @@ class GroundedScan(object):
             return False
         return True
 
-    def parse_example(self, data_example: dict):
+    def parse_example(self, data_example: dict, ignore_checks=False):
         """Take an example as written in a file and parse it to its internal representations such that we can interact
         with it."""
         command = self.parse_command_repr(data_example["command"])
@@ -257,8 +320,22 @@ class GroundedScan(object):
         derivation = self.parse_derivation_repr(data_example["derivation"])
         assert self.derivation_repr(derivation) == data_example["derivation"]
         actual_target_commands, target_demonstration, action = self.demonstrate_command(derivation, situation)
-        assert self.command_repr(actual_target_commands) == self.command_repr(target_commands)
-        return command, meaning, derivation, situation, actual_target_commands, target_demonstration, action
+        if not ignore_checks:
+            assert self.command_repr(actual_target_commands) == self.command_repr(target_commands)
+        return command, meaning, derivation, situation, target_commands, target_demonstration, action
+
+    def parse_adverb_example(self, data_example: dict):
+        """Take an example as written in a file and parse it to its internal representations such that we can interact
+                with it."""
+        # TODO: hier gebleven veranderen voor nieuwe adverbs (moet lsystem of programma op een of andere manier terug)
+        command = self.parse_command_repr(data_example["command"])
+        meaning = self.parse_command_repr(data_example["meaning"])
+        situation = Situation.from_representation(data_example["situation"])
+        target_commands = self.parse_command_repr(data_example["target_commands"])
+        derivation = self.parse_derivation_repr(data_example["derivation"])
+        assert self.derivation_repr(derivation) == data_example["derivation"]
+        actual_target_commands, _, action = self.demonstrate_command(derivation, situation)
+        return command, meaning, derivation, situation, target_commands, None, action
 
     @staticmethod
     def get_empty_situation():
@@ -570,7 +647,6 @@ class GroundedScan(object):
         bar_plot(self._data_statistics[split]["input_length"], "input_lengths",
                  os.path.join(self.save_directory, split + "_" + "input_lengths.png"))
 
-
     def save_dataset(self, file_name: str) -> str:
         """
         Saves the current generated data to a file in a particular format that is readable by load_examples_from_file.
@@ -588,6 +664,8 @@ class GroundedScan(object):
                 "max_object_size": self._object_vocabulary.largest_size,
                 "max_recursion": self.max_recursion,
                 "percentage_train": self._percentage_train,
+                "adverb_splits": ";".join(self._adverb_splits),
+                "seed": self.seed,
                 "examples": {key: values for key, values in self._data_pairs.items()}
             }
             dataset_representation.update(self._vocabulary.to_representation())
@@ -611,26 +689,27 @@ class GroundedScan(object):
                           all_data["nouns"], all_data["color_adjectives"], all_data["size_adjectives"],
                           all_data["grid_size"], all_data["min_object_size"], all_data["max_object_size"],
                           type_grammar=all_data["type_grammar"], save_directory=save_directory,
-                          percentage_train=percentage_train,
+                          percentage_train=percentage_train, adverb_splits=all_data["adverb_splits"].split(";"),
                           max_recursion=all_data["max_recursion"], sample_vocabulary='load')
             for split, examples in all_data["examples"].items():
-                if split == "adverb_1":
-                    num_examples = len(examples)
-                    k_random_indices = random.sample(range(0, num_examples), k=k)
-                else:
-                    k_random_indices = []
+                # if split == "adverb_1":
+                #     num_examples = len(examples)
+                #     k_random_indices = random.sample(range(0, num_examples), k=k)
+                # else:
+                #     k_random_indices = []
                 for i, example in enumerate(examples):
-                    if i in k_random_indices:
-                        dataset._data_pairs["train"].append(example)
-                        # dataset.update_data_statistics(example, "train")
-                        dataset._data_pairs["dev"].append(example)
-                        # dataset.update_data_statistics(example, "dev")
-                    else:
-                        dataset._data_pairs[split].append(example)
-                        # dataset.update_data_statistics(example, split)
-                    if split == "train" and dataset._vocabulary.translate_meaning("cautiously") in example["command"]:
-                        if dataset._vocabulary.translate_meaning("cautiously"):
-                            dataset._data_pairs["dev"].append(example)
+                    # if i in k_random_indices:
+                    #     dataset._data_pairs["train"].append(example)
+                    #     # dataset.update_data_statistics(example, "train")
+                    #     dataset._data_pairs["dev"].append(example)
+                    #     # dataset.update_data_statistics(example, "dev")
+                    # else:
+                    #     dataset._data_pairs[split].append(example)
+                    dataset._data_pairs[split].append(example)
+                    dataset.update_data_statistics(example, split)
+                    # if split == "train" and dataset._vocabulary.translate_meaning("cautiously") in example["command"]:
+                    #     if dataset._vocabulary.translate_meaning("cautiously"):
+                    #         dataset._data_pairs["dev"].append(example)
                             # dataset.update_data_statistics(example, "dev")
             return dataset
 
@@ -844,7 +923,9 @@ class GroundedScan(object):
             outfile.write(" Mean accuracy: {}\n".format(np.mean(np.array(all_accuracies))))
             exact_matches_counter = Counter(exact_matches)
             outfile.write(" Num. exact matches: {}\n".format(exact_matches_counter[True]))
-            outfile.write(" Num not exact matches: {}\n\n".format(exact_matches_counter[False]))
+            outfile.write(" Num not exact matches: {}\n".format(exact_matches_counter[False]))
+            outfile.write(" Exact match percentage: {}\n\n".format(
+                exact_matches_counter[True] / (exact_matches_counter[True] + exact_matches_counter[False])))
             for key, values in error_analysis.items():
                 sheet = workbook.add_sheet(key)
                 sheet.write(0, 0, key)
@@ -998,26 +1079,51 @@ class GroundedScan(object):
                 save_dirs.append(save_dir_prediction)
         return save_dirs
 
-    def visualize_data_example(self, data_example: dict) -> str:
+    def visualize_data_example(self, data_example: dict, ignore_checks=False) -> str:
         command, meaning, derivation, situation, actual_target_commands, target_demonstration, _ = self.parse_example(
-            data_example)
-        manner_sequence = []
-        for manner in self._vocabulary.get_semantic_manners():
-            if manner in command:
-                manner_sequence.extend(self._world.left_over_manners[manner])
-        mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning), "\nManner: ",
-                            ' '.join(manner_sequence),
+            data_example, ignore_checks)
+        # manner_sequence = []
+        # for manner in self._vocabulary.get_semantic_manners():
+            # if manner in command:
+            #     manner_sequence.extend(self._world.left_over_manners[manner])
+        mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning),
                             "\nTarget:"] + actual_target_commands)
         save_dir = self.visualize_command(situation, command, target_demonstration,
                                           mission=mission)
         return save_dir
 
-    def visualize_data_examples(self) -> List[str]:
+    def visualize_adverb_example(self, data_example: dict) -> str:
+        command, meaning, derivation, situation, actual_target_commands, _, _ = self.parse_adverb_example(
+            data_example)
+        target_commands, target_demonstration, end_column, end_row = self.demonstrate_target_commands(
+            ' '.join(command), situation, actual_target_commands
+        )
+        # manner_sequence = []
+        # for manner in self._vocabulary.get_semantic_manners():
+            # if manner in command:
+            #     manner_sequence.extend(self._world.left_over_manners[manner])
+        mission = ' '.join(["Command:", ' '.join(command), "\nMeaning: ", ' '.join(meaning),
+                            "\nTarget:"] + actual_target_commands)
+
+        save_dir = self.visualize_command(situation, command, target_demonstration,
+                                          mission=mission)
+        return save_dir
+
+    def visualize_data_examples(self, ignore_checks=False) -> List[str]:
         if len(self._examples_to_visualize) == 0:
             logger.info("No examples to visualize.")
         save_dirs = []
         for data_example in self._examples_to_visualize:
-            save_dir = self.visualize_data_example(data_example)
+            save_dir = self.visualize_data_example(data_example, ignore_checks)
+            save_dirs.append(save_dir)
+        return save_dirs
+
+    def visualize_adverb_examples(self, ignore_checks=False) -> List[str]:
+        if len(self._examples_to_visualize) == 0:
+            logger.info("No examples to visualize.")
+        save_dirs = []
+        for data_example in self._examples_to_visualize:
+            save_dir = self.visualize_adverb_example(data_example)
             save_dirs.append(save_dir)
         return save_dirs
 
@@ -1478,10 +1584,33 @@ class GroundedScan(object):
         self.initialize_world(current_situation, mission=current_mission)
         return
 
-    def get_adverb_world_states(self, max_examples=None, num_resampling=1, other_objects_sample_percentage=0.5,
-                                min_other_objects=0) -> List[dict]:
+    def generate_adverb_world_states(self, held_out_adverbs: List[str], example_parser: Callable,
+                                     adverb_programs: Callable, adverb_types: Callable,
+                                     input_output_keys: Callable, visualize_per_split=0,
+                                     max_examples_per_adverb=None, num_resampling=1, other_objects_sample_percentage=0.5,
+                                     k_per_adverb=0, max_examples_per_derivation=None,
+                                     min_other_objects=0, make_dev_set=False):
         """
-        Generate data and situations
+        Generate a dataset where each example has an adverb and add for each adverb the specific inputs and targets
+        that are meant for a modular model that *only* focuses on the specific transformation for that adverb.
+        E.g., if the adverb is 'while zigzagging', this transformation goes from a sequence like 'east east south'
+        as input to a sequence like 'east south east' as output. The target commands will still be first-person.
+        :param held_out_adverbs: Which adverbs to hold out, a separate split will be added for each.
+        :param example_parser: func to get the specific adverb input/output sequences (uses L-systems, see dsl.py).
+        :param adverb_programs: a function that gives the right assigned L-system for each adverb string. From dsl.py
+        :param adverb_types: a function that returns the adverb type for each string,
+            e.g. for while zigzagging it's 'movement_rewrite'
+        :param input_output_keys: A function that returns the right input/output keys, these determine where in the
+            processing the critical adverb transformation happens, can be allocentric or egocentric.
+        :param visualize_per_split:
+        :param max_examples_per_adverb:
+        :param num_resampling:
+        :param other_objects_sample_percentage:
+        :param k_per_adverb:
+        :param max_examples_per_derivation:
+        :param min_other_objects:
+        :param make_dev_set:
+        :return:
         """
         # Save current situation of the world for later restoration.
         current_situation = self._world.get_current_situation()
@@ -1492,29 +1621,225 @@ class GroundedScan(object):
         situation_specifications = self.generate_situations(num_resampling=num_resampling)
         self.generate_all_commands(with_nonterminal="RB")
         example_count = 0
-        all_data = []
+        dropped_examples = 0
+        all_derivations = self._grammar.all_derivations
+        num_total_derivations = 0
+        all_derivations = all_derivations
+        examples_per_adverb = {adverb: 0 for adverb in self._vocabulary.get_adverbs()}
+        if max_examples_per_adverb:
+            initial_max = max_examples_per_adverb
+            max_examples_per_adverb = int(max_examples_per_adverb * 1.5 + k_per_adverb)
+        all_derivations_list = {}
+        for template_num, template_derivations in all_derivations.items():
+            for template_derivation in template_derivations:
+                adverb = template_derivation.words()[-1]
+                if adverb not in all_derivations_list:
+                    all_derivations_list[adverb] = []
+                all_derivations_list[adverb].append((template_num,
+                                                     self.derivation_repr(template_derivation)))
+                num_total_derivations += 1
+        for adverb, adverb_derivations in all_derivations_list.items():
+            random.shuffle(adverb_derivations)
+        visualized_per_split = {split: 0 for split in self._possible_splits}
+        adverbs_left = [adverb for adverb in all_derivations_list.keys()]
+        while adverbs_left:
+            if not max_examples_per_adverb:
+                # TODO: what happens if this is not specified, effectively while true..
+                current_adverb = random.sample(all_derivations_list.keys(), k=1).pop()
+            else:
+                adverbs_left = [adverb for adverb in all_derivations_list.keys() if
+                                examples_per_adverb[adverb] < max_examples_per_adverb]
+                if not adverbs_left:
+                    break
+                current_adverb = random.sample(adverbs_left, k=1).pop()
+            template_num, derivation_repr = random.sample(
+                all_derivations_list[current_adverb], k=1).pop()
+            derivation = self.parse_derivation_repr(derivation_repr)
+            arguments = []
+            num_examples_derivation = 0
+            derivation.meaning(arguments)
+            assert len(arguments) == 1, "Only one target object currently supported."
+            target_str, target_predicate = arguments.pop().to_predicate()
+            possible_target_objects = self.generate_possible_targets(
+                referred_size=self._vocabulary.translate_word(target_predicate["size"]),
+                referred_color=self._vocabulary.translate_word(target_predicate["color"]),
+                referred_shape=self._vocabulary.translate_word(target_predicate["noun"]))
+            target_size, target_color, target_shape = random.sample(possible_target_objects, k=1).pop()
+            adverb = ""
+            target_action = ""
+            for word in derivation.words():
+                if word in self._vocabulary.get_adverbs():
+                    adverb = word
+                if word in self._vocabulary.get_transitive_verbs() or word in self._vocabulary.get_intransitive_verbs():
+                    target_action = word
+            relevant_situations = situation_specifications[target_shape][target_color][target_size]
+            relevant_situation = random.sample(relevant_situations, k=1).pop()
+            if max_examples_per_derivation:
+                if num_examples_derivation >= max_examples_per_derivation:
+                    continue
+            if (example_count + 1) % 1000 == 0:
+                logger.info("Number of examples: {}".format(example_count + 1))
+            if max_examples_per_adverb:
+                if adverb in examples_per_adverb:
+                    if examples_per_adverb[adverb] >= max_examples_per_adverb:
+                        break
+            self.initialize_world_from_spec(relevant_situation,
+                                            referred_size=target_predicate["size"],
+                                            referred_color=target_predicate["color"],
+                                            referred_shape=target_predicate["noun"],
+                                            actual_size=target_size,
+                                            sample_percentage=other_objects_sample_percentage,
+                                            min_other_objects=min_other_objects
+                                            )
+            situation = self._world.get_current_situation()
+            assert situation.direction_to_target == relevant_situation["direction_to_target"]
+            assert situation.distance_to_target == relevant_situation["distance_to_target"]
+            splits = self.assign_adverb_splits(verb_in_command=target_action,
+                                               manner=self._vocabulary.translate_word(adverb),
+                                               held_out_adverbs=held_out_adverbs)
+            size = situation.target_object.object.size
+            heavy = False
+            if size in [3, 4]:
+                heavy = True
+            end_position = situation.target_object.position
+            start_position = situation.agent_pos
+            if self._vocabulary.translate_word(adverb) == "while zigzagging":
+                recursion_depth = abs(end_position.column - start_position.column) - 1
+            else:
+                recursion_depth = 1
+            targets_example = example_parser(verb_in_command=target_action,
+                                             start_position=start_position,
+                                             start_direction=situation.agent_direction,
+                                             adverb=adverb_programs(self._vocabulary.translate_word(adverb)),
+                                             grid=self._world.grid,
+                                             end_position=end_position,
+                                             adverb_type=adverb_types(self._vocabulary.translate_word(adverb)),
+                                             heavy=heavy,
+                                             recursion=recursion_depth)
+            old_target_commands, old_demonstration, old_target_action = self.demonstrate_command(
+                derivation, situation)
+            if self._vocabulary.translate_word(adverb) in [
+                "while spinning", "cautiously", "hesitantly", "while zigzagging"]:
+                assert ','.join(old_target_commands) == ','.join(targets_example["target_commands"])
+            input_key, output_key = input_output_keys(adverb_types(self._vocabulary.translate_word(adverb)))
+            inputs = targets_example[input_key]
+            outputs = targets_example[output_key]
+            if len(splits) == 0:
+                splits = ["train"]
+            elif len(splits) > 1:
+                dropped_examples += 1
+                self._world.clear_situation()
+                continue
+            if visualized_per_split[splits[0]] < visualize_per_split:
+                visualized_per_split[splits[0]] += 1
+                visualize = True
+            else:
+                visualize = False
+            self.fill_adverb_example(command=derivation.words(), derivation=derivation,
+                                     situation=situation, verb_in_command=target_action,
+                                     target_predicate=target_predicate, adverb=adverb, splits=splits,
+                                     planner_input=inputs, adverb_target=outputs,
+                                     type_adverb=adverb_types(self._vocabulary.translate_word(adverb)),
+                                     target_commands=targets_example["target_commands"],
+                                     visualize=visualize)
+
+            example_count += 1
+            num_examples_derivation += 1
+            if adverb not in examples_per_adverb:
+                examples_per_adverb[adverb] = 0
+            if "adverb_2" not in splits:
+                examples_per_adverb[adverb] += 1
+            for split in splits:
+                self._template_identifiers[split].append(template_num)
+            self._world.clear_situation()
+        logger.info("Dropped {} examples due to belonging to multiple splits.".format(dropped_examples))
+        self.make_test_set(percentage=(1 - self._percentage_train), type_set="test")
+        logger.info("Discarding equivalent examples, may take a while...")
+        equivalent_examples = self.discard_equivalent_examples()
+        logger.info("Discarded {} examples from the test set that were already in the training set.".format(
+            equivalent_examples))
+
+        if make_dev_set:
+            self.make_test_set(percentage=self._percentage_dev, type_set="dev")
+
+        if max_examples_per_adverb:
+            self.discard_excess_examples_train(initial_max)
+
+        if k_per_adverb > 0:
+            self.move_k_examples_to_train(k_per_adverb, split="adverb_1")
+        if k_per_adverb > 0:
+            for split in held_out_adverbs:
+                split = "extra_" + split
+                self.move_k_examples_to_train(k_per_adverb, split=split)
+
+        # restore situation
+        self.initialize_world(current_situation, mission=current_mission)
+        return
+
+    def generate_all_adverb_world_states(self, held_out_adverbs: List[str], example_parser: Callable,
+                                         adverb_programs: Callable, adverb_types: Callable,
+                                         input_output_keys: Callable, visualize_per_split=0,
+                                         num_resampling=1,
+                                         other_objects_sample_percentage=0.5,
+                                         k_per_adverb=0,
+                                         min_other_objects=0, make_dev_set=False):
+        """
+        Generate a dataset where each example has an adverb and add for each adverb the specific inputs and targets
+        that are meant for a modular model that *only* focuses on the specific transformation for that adverb.
+        E.g., if the adverb is 'while zigzagging', this transformation goes from a sequence like 'east east south'
+        as input to a sequence like 'east south east' as output. The target commands will still be first-person.
+        :param held_out_adverbs: Which adverbs to hold out, a separate split will be added for each.
+        :param example_parser: func to get the specific adverb input/output sequences (uses L-systems, see dsl.py).
+        :param adverb_programs: a function that gives the right assigned L-system for each adverb string. From dsl.py
+        :param adverb_types: a function that returns the adverb type for each string,
+            e.g. for while zigzagging it's 'movement_rewrite'
+        :param input_output_keys: A function that returns the right input/output keys, these determine where in the
+            processing the critical adverb transformation happens, can be allocentric or egocentric.
+        :param visualize_per_split:
+        :param num_resampling:
+        :param other_objects_sample_percentage:
+        :param k_per_adverb:
+        :param max_examples_per_derivation:
+        :param min_other_objects:
+        :param make_dev_set:
+        :return:
+        """
+        # Save current situation of the world for later restoration.
+        current_situation = self._world.get_current_situation()
+        current_mission = self._world.mission
+        self.reset_dataset()
+
+        # Generate all situations and commands.
+        situation_specifications = self.generate_situations(num_resampling=num_resampling)
+        self.generate_all_commands(with_nonterminal="RB")
+        example_count = 0
+        dropped_examples = 0
+        all_derivations = self._grammar.all_derivations
+        examples_per_adverb = {adverb: 0 for adverb in self._vocabulary.get_adverbs()}
+        visualized_per_split = {split: 0 for split in self._possible_splits}
         for template_num, template_derivations in self._grammar.all_derivations.items():
             for derivation in template_derivations:
                 arguments = []
                 derivation.meaning(arguments)
                 assert len(arguments) == 1, "Only one target object currently supported."
                 target_str, target_predicate = arguments.pop().to_predicate()
+                adverb = ""
+                target_action = ""
+                for word in derivation.words():
+                    if word in self._vocabulary.get_adverbs():
+                        adverb = word
+                    if word in self._vocabulary.get_transitive_verbs() or word in self._vocabulary.get_intransitive_verbs():
+                        target_action = word
                 possible_target_objects = self.generate_possible_targets(
                     referred_size=self._vocabulary.translate_word(target_predicate["size"]),
                     referred_color=self._vocabulary.translate_word(target_predicate["color"]),
                     referred_shape=self._vocabulary.translate_word(target_predicate["noun"]))
-                adverb = ""
-                for word in derivation.words():
-                    if word in self._vocabulary.get_adverbs():
-                        adverb = word
                 for target_size, target_color, target_shape in possible_target_objects:
                     relevant_situations = situation_specifications[target_shape][target_color][target_size]
+                    num_relevant_situations = len(relevant_situations)
                     for i, relevant_situation in enumerate(relevant_situations):
                         if (example_count + 1) % 10000 == 0:
                             logger.info("Number of examples: {}".format(example_count + 1))
-                        if max_examples:
-                            if example_count >= max_examples:
-                                break
                         self.initialize_world_from_spec(relevant_situation,
                                                         referred_size=target_predicate["size"],
                                                         referred_color=target_predicate["color"],
@@ -1526,25 +1851,98 @@ class GroundedScan(object):
                         situation = self._world.get_current_situation()
                         assert situation.direction_to_target == relevant_situation["direction_to_target"]
                         assert situation.distance_to_target == relevant_situation["distance_to_target"]
-                        data_example = {
-                            "command": self.command_repr(derivation.words()),
-                            "meaning": self.command_repr(self.meaning_command(derivation.words())),
-                            "derivation": self.derivation_repr(derivation),
-                            "situation": situation.to_representation(),
-                            "target_commands": "",
-                            "verb_in_command": "",
-                            "manner": self._vocabulary.translate_word(adverb),
-                            "referred_target": ' '.join([self._vocabulary.translate_word(target_predicate["size"]),
-                                                         self._vocabulary.translate_word(target_predicate["color"]),
-                                                         self._vocabulary.translate_word(target_predicate["noun"])])
-                        }
-                        all_data.append(data_example)
+                        splits = self.assign_adverb_splits(verb_in_command=target_action,
+                                                           manner=self._vocabulary.translate_word(adverb),
+                                                           held_out_adverbs=held_out_adverbs)
+                        size = situation.target_object.object.size
+                        heavy = False
+                        if size in [3, 4]:
+                            heavy = True
+                        end_position = situation.target_object.position
+                        start_position = situation.agent_pos
+                        if self._vocabulary.translate_word(adverb) == "while zigzagging":
+                            recursion_depth = abs(end_position.column - start_position.column) - 1
+                        else:
+                            recursion_depth = 1
+                        targets_example = example_parser(verb_in_command=target_action,
+                                                         start_position=start_position,
+                                                         start_direction=situation.agent_direction,
+                                                         adverb=adverb_programs(self._vocabulary.translate_word(adverb)),
+                                                         grid=self._world.grid,
+                                                         end_position=end_position,
+                                                         adverb_type=adverb_types(self._vocabulary.translate_word(adverb)),
+                                                         heavy=heavy,
+                                                         recursion=recursion_depth)
+                        input_key, output_key = input_output_keys(adverb_types(self._vocabulary.translate_word(adverb)))
+                        inputs = targets_example[input_key]
+                        outputs = targets_example[output_key]
+                        old_target_commands, old_demonstration, old_target_action = self.demonstrate_command(
+                            derivation, situation)
+                        if self._vocabulary.translate_word(adverb) in [
+                            "while spinning", "cautiously", "hesitantly", "while zigzagging"]:
+                            assert ','.join(old_target_commands) == ','.join(targets_example["target_commands"])
+                        if len(splits) == 0:
+                            splits = ["train"]
+                        elif len(splits) > 1:
+                            dropped_examples += 1
+                            self._world.clear_situation()
+                            continue
+                        if visualized_per_split[splits[0]] < visualize_per_split:
+                            visualized_per_split[splits[0]] += 1
+                            visualize = True
+                        else:
+                            visualize = False
+                        self.fill_adverb_example(command=derivation.words(), derivation=derivation,
+                                                 situation=situation, verb_in_command=target_action,
+                                                 target_predicate=target_predicate, adverb=adverb, splits=splits,
+                                                 planner_input=inputs, adverb_target=outputs,
+                                                 type_adverb=adverb_types(self._vocabulary.translate_word(adverb)),
+                                                 target_commands=targets_example["target_commands"],
+                                                 visualize=visualize)
+
                         example_count += 1
+                        if adverb not in examples_per_adverb:
+                            examples_per_adverb[adverb] = 0
+                        if "adverb_2" not in splits:
+                            examples_per_adverb[adverb] += 1
+                        for split in splits:
+                            self._template_identifiers[split].append(template_num)
                         self._world.clear_situation()
+        logger.info("Dropped {} examples due to belonging to multiple splits.".format(dropped_examples))
+        self.make_test_set(percentage=(1 - self._percentage_train), type_set="test")
+        logger.info("Discarding equivalent examples, may take a while...")
+        equivalent_examples = self.discard_equivalent_examples()
+        logger.info("Discarded {} examples from the test set that were already in the training set.".format(
+            equivalent_examples))
+
+        if make_dev_set:
+            self.make_test_set(percentage=self._percentage_dev, type_set="dev")
+
+        if k_per_adverb > 0:
+            self.move_k_examples_to_train(k_per_adverb, split="adverb_1")
+        if k_per_adverb > 0:
+            for split in held_out_adverbs:
+                split = "extra_" + split
+                self.move_k_examples_to_train(k_per_adverb, split=split)
 
         # restore situation
         self.initialize_world(current_situation, mission=current_mission)
-        return all_data
+        return
+
+    def assign_adverb_splits(self, verb_in_command: str, manner: str, held_out_adverbs: List[str]):
+        splits = []
+        # Experiment 5: generalize adverb to new situations.
+        if manner == "cautiously":
+            splits.append("adverb_1")
+        # Experiment 6: generalize adverb to new verb 'pull'.
+        if (verb_in_command == self._vocabulary.translate_meaning("pull")
+                and manner == "while spinning"):
+            splits.append("adverb_2")
+        adverb = self._vocabulary.translate_meaning(manner)
+        if adverb in held_out_adverbs:
+            split = "extra_" + adverb
+            splits.append(split)
+        return splits
 
     def assign_splits(self, target_size: str, target_color: str, target_shape: str, verb_in_command: str,
                       direction_to_target: str, referred_target: dict, manner: str):

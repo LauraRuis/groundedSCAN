@@ -1,4 +1,5 @@
 from GroundedScan.dataset import GroundedScan
+from GroundedScan.dsl import AdverbWorld
 from GroundedScan.dataset_test import run_all_tests
 
 import argparse
@@ -94,6 +95,18 @@ def main():
     parser.add_argument('--num_color_adjectives', type=int, default=2, help='number of color adjectives to sample.')
     parser.add_argument('--num_size_adjectives', type=int, default=2, help='number of size adjectives to sample.')
 
+    # Adverb Challenge flags, relevant when --mode=generate_adverb_challenge
+    parser.add_argument('--num_extra_training_adverbs', type=int, default=0,
+                        help='how many adverbs to generate (extra because the '
+                             'dataset will already contain the 4 gSCAN adverbs)')
+    parser.add_argument('--num_train_examples_per_train_adverb', type=int, default=None,
+                        help='how many examples to generate for each adverb.')
+    parser.add_argument('--num_extra_testing_adverbs', type=int, default=0,
+                        help='how many extra testing adverbs to generate (extra because the'
+                             'dataset will already contain the 2 gSCAN adverb splits)')
+    parser.add_argument('--num_train_examples_per_test_adverb', type=int, default=100,
+                        help='how many examples to move to train from these'
+                             'extra held-out adverbs (this is the k in k-shot learning)')
     flags = vars(parser.parse_args())
 
     if flags["type_grammar"] == "full":
@@ -225,6 +238,20 @@ def main():
         logger.info("Writing statistics to {}".format(flags["output_directory"]))
         for split in grounded_scan._possible_splits:
             grounded_scan.save_dataset_statistics(split=split)
+    elif flags['mode'] == 'generate_adverb_challenge':
+        adverb_world = AdverbWorld(seed=1, save_directory=flags["output_directory"])
+        adverb_world.generate_adverb_challenge(
+            num_extra_training_adverbs=flags["num_extra_training_adverbs"],
+            num_train_examples_per_train_adverb=flags["num_train_examples_per_train_adverb"],
+            num_extra_testing_adverbs=flags["num_extra_testing_adverbs"],
+            num_train_examples_per_test_adverb=flags["num_train_examples_per_test_adverb"],
+            num_resampling=flags["num_resampling"],
+            visualize_per_split=flags["visualize_per_split"],
+            grid_size=6, make_dev_set=True)
+        save_path = adverb_world.save_adverb_challenge("adverb_challenge.txt")
+        logger.info("Saved adverb challenge at %s" % save_path)
+        adverb_world.save_gscan_statistics(dev_set=True)
+        adverb_world.visualize_gscan_examples()
     else:
         raise ValueError("Unknown value for command-line argument 'mode'={}.".format(flags['mode']))
 
