@@ -31,7 +31,7 @@ class GroundedScan(object):
                  size_adjectives: Union[Dict[str, str], List[str], int],
                  grid_size: int, min_object_size: int,
                  max_object_size: int, type_grammar: str, sample_vocabulary: str, percentage_train: float,
-                 percentage_dev=0.01, adverb_splits=None,
+                 percentage_dev=0.01, adverb_splits=None, use_gscan_adverbs=True,
                  save_directory=os.getcwd(), max_recursion=1, seed=123):
         self.seed = seed
         np.random.seed(seed)
@@ -57,11 +57,13 @@ class GroundedScan(object):
             self._vocabulary = Vocabulary.initialize(intransitive_verbs=intransitive_verbs,
                                                      transitive_verbs=transitive_verbs, adverbs=adverbs, nouns=nouns,
                                                      color_adjectives=color_adjectives,
-                                                     size_adjectives=size_adjectives)
+                                                     size_adjectives=size_adjectives,
+                                                     bind_gscan_adverbs=use_gscan_adverbs)
         elif sample_vocabulary == 'sample':
             self._vocabulary = Vocabulary.sample(num_intransitive=intransitive_verbs, num_transitive=transitive_verbs,
                                                  num_adverbs=adverbs, num_color_adjectives=color_adjectives,
-                                                 num_size_adjectives=size_adjectives)
+                                                 num_size_adjectives=size_adjectives,
+                                                 bind_gscan_adverbs=use_gscan_adverbs)
         # We need to be able to load the saved vocabulary from file to map nonce words to their original meaning.
         elif sample_vocabulary == 'load':
             self._vocabulary = Vocabulary(intransitive_verbs=intransitive_verbs,
@@ -101,6 +103,9 @@ class GroundedScan(object):
             for adverb_split in adverb_splits:
                 self._possible_splits += ["extra_" + adverb_split]
         self._data_pairs = self.get_empty_split_dict()
+        self._data_pairs_for_equivalence = self.get_empty_split_dict()
+        for split in self._data_pairs_for_equivalence.keys():
+            self._data_pairs_for_equivalence[split] = {}
         self._template_identifiers = self.get_empty_split_dict()
         self._examples_to_visualize = []
         self._k_shot_examples_in_train = Counter()
@@ -108,6 +113,7 @@ class GroundedScan(object):
         self._coverage_commands = {split: {} for split in self._possible_splits}
         self._coverage_worlds = {split: {} for split in self._possible_splits}
         self._coverage_full = {split: {} for split in self._possible_splits}
+        self._discarded_equivalent_examples = False
 
     def reset_dataset(self):
         self._grammar.reset_grammar()
@@ -122,18 +128,39 @@ class GroundedScan(object):
     def make_test_set(self, type_set: str, percentage: float):
         num_examples = int(percentage * len(self._data_pairs["train"]))
         k_random_indices = random.sample(range(0, len(self._data_pairs["train"])), k=num_examples)
+        example_representations = {}
+        representation_not_in_train = 0
         for example_idx in k_random_indices:
             example = deepcopy(self._data_pairs["train"][example_idx])
             template_identifier = self._template_identifiers["train"][example_idx]
+            representation_for_equivalence = example["representation_for_equivalence"]["representation"]
             self._data_pairs[type_set].append(example)
+            if representation_for_equivalence not in self._data_pairs_for_equivalence[type_set]:
+                self._data_pairs_for_equivalence[type_set][representation_for_equivalence] = {}
+            self._data_pairs_for_equivalence[type_set][representation_for_equivalence][
+                str(example["situation"])] = len(self._data_pairs[type_set]) - 1
+            example_representations[example_idx] = representation_for_equivalence
             self._template_identifiers[type_set].append(template_identifier)
         for example_idx in sorted(k_random_indices, reverse=True):
+            example = deepcopy(self._data_pairs["train"][example_idx])
             del self._data_pairs["train"][example_idx]
             del self._template_identifiers["train"][example_idx]
+            representation_for_equivalence = example_representations[example_idx]
+            if representation_for_equivalence in self._data_pairs_for_equivalence["train"]:
+                if str(example["situation"]) in self._data_pairs_for_equivalence["train"][representation_for_equivalence]:
+                    del self._data_pairs_for_equivalence["train"][representation_for_equivalence][str(example["situation"])]
+                    if len(self._data_pairs_for_equivalence["train"][representation_for_equivalence]) == 0:
+                        del self._data_pairs_for_equivalence["train"][representation_for_equivalence]
+                else:
+                    representation_not_in_train += 1
+            else:
+                representation_not_in_train += 1
+        logger.info("Representation not in train set for equivalence %d times." % representation_not_in_train)
 
     def move_k_examples_to_train(self, k: int, split: str):
         if len(self._data_pairs[split]) < k + 1:
             logger.info("Not enough examples in split {} for k(k={})-shot generalization".format(split, k))
+            return
         k_random_indices = random.sample(range(0, len(self._data_pairs[split])), k=k)
         for example_idx in k_random_indices:
             example = deepcopy(self._data_pairs[split][example_idx])
@@ -147,7 +174,8 @@ class GroundedScan(object):
             del self._data_pairs[split][example_idx]
             del self._template_identifiers[split][example_idx]
 
-    def get_examples_with_image(self, split="train", simple_situation_representation=False, adverb_inputs=False) -> dict:
+    def get_examples_with_image(self, split="train", simple_situation_representation=False, adverb_inputs=False,
+                                shuffle=False) -> dict:
         """
         Get data pairs with images in the form of np.ndarray's with RGB values or with 1 pixel per grid cell
         (see encode in class Grid of minigrid.py for details on what such representation looks like).
@@ -155,7 +183,11 @@ class GroundedScan(object):
         :param simple_situation_representation:  whether to get the full RGB image or a simple representation.
         :return: data examples.
         """
-        for example in self._data_pairs[split]:
+        indices = list(range(0, len(self._data_pairs[split])))
+        if shuffle:
+            random.shuffle(indices)
+        for idx in indices:
+            example = self._data_pairs[split][idx]
             command = self.parse_command_repr(example["command"])
             if example.get("meaning"):
                 meaning = example["meaning"]
@@ -223,6 +255,25 @@ class GroundedScan(object):
             del self._template_identifiers[split][i_to_delete]
         return equivalent_examples
 
+    def discard_equivalent_examples_v2(self, split="test") -> int:
+        """Go over the specified split and discard any examples that are already found in the training set."""
+        assert not self._discarded_equivalent_examples, "This function only works once due to mismatch in index "\
+                                                        "identifiers in self._data_pairs_for_equivalence after "\
+                                                        "removing examples once."
+        equivalent_examples = 0
+        to_delete = []
+        for example_representation in self._data_pairs_for_equivalence[split]:
+            if example_representation in self._data_pairs_for_equivalence["train"]:
+                indices_to_delete = list(self._data_pairs_for_equivalence[split][example_representation].values())
+                equivalent_examples += len(indices_to_delete)
+                to_delete.extend(indices_to_delete)
+        if len(to_delete) > 0:
+            self._discarded_equivalent_examples = True
+        for i_to_delete in sorted(to_delete, reverse=True):
+            del self._data_pairs[split][i_to_delete]
+            del self._template_identifiers[split][i_to_delete]
+        return equivalent_examples
+
     def discard_excess_examples_train(self, max_examples: int):
         manner_count = {}
         to_delete = []
@@ -264,8 +315,20 @@ class GroundedScan(object):
                                          self._vocabulary.translate_word(target_predicate["color"]),
                                          self._vocabulary.translate_word(target_predicate["noun"])])
         }
+        representation_for_equivalence = ";".join([self.command_repr(command),
+                                                   self.command_repr(target_commands),
+                                                   str(situation.target_object.position.row),
+                                                   str(situation.target_object.position.column)])
+        example["representation_for_equivalence"] = {}
+        example["representation_for_equivalence"]["representation"] = representation_for_equivalence
+        example["representation_for_equivalence"]["situation"] = str(situation.to_representation())
         for split in splits:
             self._data_pairs[split].append(example)
+        for split in splits:
+            if representation_for_equivalence not in self._data_pairs_for_equivalence[split]:
+                self._data_pairs_for_equivalence[split][representation_for_equivalence] = {}
+            self._data_pairs_for_equivalence[split][representation_for_equivalence][
+                str(situation.to_representation())] = len(self._data_pairs[split]) - 1
         if visualize:
             self._examples_to_visualize.append(example)
         return example
@@ -290,10 +353,22 @@ class GroundedScan(object):
                                          self._vocabulary.translate_word(target_predicate["color"]),
                                          self._vocabulary.translate_word(target_predicate["noun"])])
         }
+        representation_for_equivalence = ";".join([self.command_repr(command),
+                                                   self.command_repr(target_commands),
+                                                   str(situation.target_object.position.row),
+                                                   str(situation.target_object.position.column)])
+        example["representation_for_equivalence"] = {}
+        example["representation_for_equivalence"]["representation"] = representation_for_equivalence
+        example["representation_for_equivalence"]["situation"] = str(situation.to_representation())
         for split in splits:
             self._data_pairs[split].append(example)
         if visualize:
             self._examples_to_visualize.append(example)
+        for split in splits:
+            if representation_for_equivalence not in self._data_pairs_for_equivalence[split]:
+                self._data_pairs_for_equivalence[split][representation_for_equivalence] = {}
+            self._data_pairs_for_equivalence[split][representation_for_equivalence][
+                str(situation.to_representation())] = len(self._data_pairs[split]) - 1
         return example
 
     @staticmethod
@@ -1754,10 +1829,15 @@ class GroundedScan(object):
             self._world.clear_situation()
         logger.info("Dropped {} examples due to belonging to multiple splits.".format(dropped_examples))
         self.make_test_set(percentage=(1 - self._percentage_train), type_set="test")
-        logger.info("Discarding equivalent examples, may take a while...")
-        equivalent_examples = self.discard_equivalent_examples()
-        logger.info("Discarded {} examples from the test set that were already in the training set.".format(
+        logger.info("Discarding equivalent examples v2.")
+        equivalent_examples = self.discard_equivalent_examples_v2()
+        logger.info("Discarded {} examples from the test set that were already in the training set with v2.".format(
             equivalent_examples))
+        # logger.info("Discarding equivalent examples, may take a while...")
+        # equivalent_examples = self.discard_equivalent_examples()
+        # logger.info("Discarded {} examples from the test set that were already in the training set.".format(
+        #     equivalent_examples))
+        # assert equivalent_examples == 0, "v2 doesnt work"
 
         if make_dev_set:
             self.make_test_set(percentage=self._percentage_dev, type_set="dev")
@@ -1814,7 +1894,6 @@ class GroundedScan(object):
         self.generate_all_commands(with_nonterminal="RB")
         example_count = 0
         dropped_examples = 0
-        all_derivations = self._grammar.all_derivations
         examples_per_adverb = {adverb: 0 for adverb in self._vocabulary.get_adverbs()}
         visualized_per_split = {split: 0 for split in self._possible_splits}
         for template_num, template_derivations in self._grammar.all_derivations.items():
@@ -1911,7 +1990,7 @@ class GroundedScan(object):
         logger.info("Dropped {} examples due to belonging to multiple splits.".format(dropped_examples))
         self.make_test_set(percentage=(1 - self._percentage_train), type_set="test")
         logger.info("Discarding equivalent examples, may take a while...")
-        equivalent_examples = self.discard_equivalent_examples()
+        equivalent_examples = self.discard_equivalent_examples_v2()
         logger.info("Discarded {} examples from the test set that were already in the training set.".format(
             equivalent_examples))
 
