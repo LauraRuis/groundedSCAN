@@ -115,6 +115,11 @@ class GroundedScan(object):
         self._coverage_full = {split: {} for split in self._possible_splits}
         self._discarded_equivalent_examples = False
 
+    def change_seed(self, seed: int):
+        self.seed = seed
+        np.random.seed(seed)
+        random.seed(seed)
+
     def reset_dataset(self):
         self._grammar.reset_grammar()
         self._data_pairs = self.get_empty_split_dict()
@@ -149,10 +154,10 @@ class GroundedScan(object):
             if representation_for_equivalence in self._data_pairs_for_equivalence["train"]:
                 if str(example["situation"]) in self._data_pairs_for_equivalence["train"][representation_for_equivalence]:
                     del self._data_pairs_for_equivalence["train"][representation_for_equivalence][str(example["situation"])]
-                    if len(self._data_pairs_for_equivalence["train"][representation_for_equivalence]) == 0:
-                        del self._data_pairs_for_equivalence["train"][representation_for_equivalence]
                 else:
                     representation_not_in_train += 1
+                if len(self._data_pairs_for_equivalence["train"][representation_for_equivalence]) == 0:
+                    del self._data_pairs_for_equivalence["train"][representation_for_equivalence]
             else:
                 representation_not_in_train += 1
         logger.info("Representation not in train set for equivalence %d times." % representation_not_in_train)
@@ -754,7 +759,8 @@ class GroundedScan(object):
         return output_path
 
     @classmethod
-    def load_dataset_from_file(cls, file_path: str, save_directory: str, k=0):
+    def load_dataset_from_file(cls, file_path: str, save_directory: str, k=None,
+                               isolate_examples_with="cautiously", upsample_cautiously=1):
         with open(file_path, 'r') as infile:
             all_data = json.load(infile)
             percentage_train = all_data.get("percentage_train")
@@ -766,26 +772,26 @@ class GroundedScan(object):
                           type_grammar=all_data["type_grammar"], save_directory=save_directory,
                           percentage_train=percentage_train, adverb_splits=all_data["adverb_splits"].split(";"),
                           max_recursion=all_data["max_recursion"], sample_vocabulary='load')
+            dataset._data_pairs["isolated_examples"] = []
             for split, examples in all_data["examples"].items():
-                # if split == "adverb_1":
-                #     num_examples = len(examples)
-                #     k_random_indices = random.sample(range(0, num_examples), k=k)
-                # else:
-                #     k_random_indices = []
                 for i, example in enumerate(examples):
-                    # if i in k_random_indices:
-                    #     dataset._data_pairs["train"].append(example)
-                    #     # dataset.update_data_statistics(example, "train")
-                    #     dataset._data_pairs["dev"].append(example)
-                    #     # dataset.update_data_statistics(example, "dev")
-                    # else:
-                    #     dataset._data_pairs[split].append(example)
-                    dataset._data_pairs[split].append(example)
-                    dataset.update_data_statistics(example, split)
-                    # if split == "train" and dataset._vocabulary.translate_meaning("cautiously") in example["command"]:
-                    #     if dataset._vocabulary.translate_meaning("cautiously"):
-                    #         dataset._data_pairs["dev"].append(example)
-                            # dataset.update_data_statistics(example, "dev")
+                    if isolate_examples_with in example["command"] and split == "train":
+                        dataset._data_pairs["isolated_examples"].append(example)
+                    else:
+                        dataset._data_pairs[split].append(example)
+                        dataset.update_data_statistics(example, split)
+            num_added_cautiously = 0
+            isolated_examples = deepcopy(dataset._data_pairs["isolated_examples"])
+            random.shuffle(isolated_examples)
+            if k:
+                cautious_examples = isolated_examples[:k] * upsample_cautiously
+            else:
+                cautious_examples = isolated_examples
+            for i, example in enumerate(cautious_examples):
+                dataset._data_pairs["train"].append(example)
+                dataset.update_data_statistics(example, "train")
+                num_added_cautiously += 1
+
             return dataset
 
     def generate_all_commands(self, with_nonterminal=None) -> {}:
