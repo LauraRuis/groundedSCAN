@@ -21,19 +21,19 @@ Some data examples (more at bottom of this file, and a demo dataset can be found
 ## Leaderboard
 This section contains the leaderboard for scores obtained by papers on gSCAN. To add scores please consider a pull request. 
 
-|                             | Baseline      | GECA | [1]         |  [2]         |  [3]         | [4]         |  [5]         |
-|-----------------------------|---------------|------|--------------|--------------|--------------|--------------|--------------|
-| A: Random       | 97.69 +\- 0.22  | 87.6 +\- 1.19  | 97.32   | 94.19 +\- 0.71     | **98.6 +\- 0.95**     |  -     |  74.7     |
-| B: Yellow Squares       | 54.96 +\- 39.39  | 34.92 +\- 39.30  | 95.35   | 87.31 +\- 4.38     | **99.08 +\- 0.69**     | -     | 81.3     |
-| C: Red Squares       | 23.51 +\- 21.82  | 78.77 +\- 6.63  | 80.16   | **81.07 +\- 10.12**     | 80.31 +\- 24.51     | -     | 78.1     |
-| D: Novel Direction       | 0.00 +\- 0.00  | 0.00 +\- 0.00  | **5.73**   | -     | 0.16 +\- 0.12     | -     | 0     |
-| E: Relativity       | 35.02 +\- 2.35  | 33.19 +\- 3.69  | 75.19   | 52.8 +\- 9.96     | **87.32 +\- 27.38**     | -     | 53.6     |
-| F: Class Inference       | 92.52 +\- 6.75  | 85.99 +\- 0.85  | 98.63   | -     | **99.33 +\- 0.46**     | -     | 76.2     |
-| G: Adverb k=1       | 0.00 +\- 0.00  | 0.00 +\- 0.00  | **11.94**   | -     | -     | -     | 0.0     |
-| G: Adverb k=5       | 0.47 +\- 0.14  | -  | **10.31**   | -     | -     | -     | -     |
-| G: Adverb k=10       | 2.04 +\- 0.95  | -  | **33.28**   | -     | -     | 4.87     | 4.87     |
-| G: Adverb k=50       | 4.63 +\- 2.08  | -  | **40.78**   | -     | -     |  -     |  -     |
-| H: Adverb to Verb       | 22.70 +\- 4.59  | 11.83 +\- 0.31  | 21.95   | -     | **33.6 +\- 20.81**     | 28.03       | 21.8       |
+|                             | Baseline      | GECA | [1]         |  [2]         |  [3]         | [4]         |  [5]         |  [6]         |
+|-----------------------------|---------------|------|--------------|--------------|--------------|--------------|--------------|--------------|
+| A: Random       | 97.69 +\- 0.22  | 87.6 +\- 1.19  | 97.32   | 94.19 +\- 0.71     | **98.6 +\- 0.95**     |  -     |  74.7     | 99.95 +/- 0.02 |
+| B: Yellow Squares       | 54.96 +\- 39.39  | 34.92 +\- 39.30  | 95.35   | 87.31 +\- 4.38     | **99.08 +\- 0.69**     | -     | 81.3     | 99.90 +/- 0.06 |
+| C: Red Squares       | 23.51 +\- 21.82  | 78.77 +\- 6.63  | 80.16   | **81.07 +\- 10.12**     | 80.31 +\- 24.51     | -     | 78.1     | 99.25 +/- 0.91 |
+| D: Novel Direction       | 0.00 +\- 0.00  | 0.00 +\- 0.00  | **5.73**   | -     | 0.16 +\- 0.12     | -     | 0     | 0.0 +/- 0.0  |
+| E: Relativity       | 35.02 +\- 2.35  | 33.19 +\- 3.69  | 75.19   | 52.8 +\- 9.96     | **87.32 +\- 27.38**     | -     | 53.6     | 99.02 +/- 1.16 |
+| F: Class Inference       | 92.52 +\- 6.75  | 85.99 +\- 0.85  | 98.63   | -     | **99.33 +\- 0.46**     | -     | 76.2     | 99.98 +/- 0.01 |
+| G: Adverb k=1       | 0.00 +\- 0.00  | 0.00 +\- 0.00  | **11.94**   | -     | -     | -     | 0.0     | 0.00 +/- 0.00 |
+| G: Adverb k=5       | 0.47 +\- 0.14  | -  | **10.31**   | -     | -     | -     | -     | -     |
+| G: Adverb k=10       | 2.04 +\- 0.95  | -  | **33.28**   | -     | -     | 4.87     | 4.87     | -     |
+| G: Adverb k=50       | 4.63 +\- 2.08  | -  | **40.78**   | -     | -     |  -     |  -     | -     |
+| H: Adverb to Verb       | 22.70 +\- 4.59  | 11.83 +\- 0.31  | 21.95   | -     | **33.6 +\- 20.81**     | 28.03       | 21.8       | 22.16 +/- 0.01 |
 | I: Length       | **2.10 +\- 0.05**  | -  |  -  | -     | -     | -     |
 
 
@@ -49,6 +49,9 @@ via Auxiliary Sequence Prediction Tasks"](https://arxiv.org/pdf/2109.15256.pdf)
 [5] Maxwell Nye, Michael Henry Tessler, Joshua B. Tenenbaum, Brenden M. Lake. 2021. ["Improving Coherence and Consistency in Neural
 Sequence Models with Dual-System,
 Neuro-Symbolic Reasoning"](https://proceedings.neurips.cc/paper/2021/file/d3e2e8f631bd9336ed25b8162aef8782-Paper.pdf)
+
+[6] Linlu Qui, Hexiang Hu, Bowen Zhang, Peter Shaw, Fei Sha. 2020. ["Systematic Generalization on gSCAN:
+What is Nearly Solved and What is Next?"](https://arxiv.org/pdf/2109.12243.pdf)
     
 
 ## Data for Paper
